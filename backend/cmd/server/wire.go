@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/ent"
+	"github.com/Wei-Shaw/sub2api/internal/callaudit"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler"
 	"github.com/Wei-Shaw/sub2api/internal/payment"
@@ -34,6 +35,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	wire.Build(
 		// Infrastructure layer ProviderSets
 		config.ProviderSet,
+		callaudit.ProviderSet,
 
 		// Business layer ProviderSets
 		repository.ProviderSet,
@@ -109,9 +111,10 @@ func provideCleanup(
 	upstreamBillingProbe *service.UpstreamBillingProbeService,
 	auditLog *service.AuditLogService,
 	promptAudit *securityaudit.PromptService,
+	callAudit *callaudit.Runtime,
 ) func() {
 	return func() {
-		ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ctx, cancel := context.WithTimeout(context.Background(), 20*time.Second)
 		defer cancel()
 
 		type cleanupStep struct {
@@ -121,6 +124,12 @@ func provideCleanup(
 
 		// 应用层清理步骤可并行执行，基础设施资源（Redis/Ent）最后按顺序关闭。
 		parallelSteps := []cleanupStep{
+			{"CallAuditRuntime", func() error {
+				if callAudit != nil {
+					return callAudit.Shutdown(ctx)
+				}
+				return nil
+			}},
 			{"PromptAuditService", func() error {
 				if promptAudit != nil {
 					return promptAudit.Shutdown(ctx)
@@ -354,7 +363,7 @@ func provideCleanup(
 		// Check if context timed out
 		select {
 		case <-ctx.Done():
-			log.Printf("[Cleanup] Warning: cleanup timed out after 10 seconds")
+			log.Printf("[Cleanup] Warning: cleanup timed out after 20 seconds")
 		default:
 			log.Printf("[Cleanup] All cleanup steps completed")
 		}

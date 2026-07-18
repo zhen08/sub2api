@@ -6,6 +6,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/callaudit"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler"
 	middleware2 "github.com/Wei-Shaw/sub2api/internal/server/middleware"
@@ -26,6 +27,8 @@ func SetupRouter(
 	jwtAuth middleware2.JWTAuthMiddleware,
 	adminAuth middleware2.AdminAuthMiddleware,
 	apiKeyAuth middleware2.APIKeyAuthMiddleware,
+	callAudit middleware2.CallAuditMiddleware,
+	callAuditRuntime *callaudit.Runtime,
 	auditLog middleware2.AuditLogMiddleware,
 	stepUpAuth middleware2.StepUpAuthMiddleware,
 	apiKeyService *service.APIKeyService,
@@ -87,7 +90,7 @@ func SetupRouter(
 	}
 
 	// 注册路由
-	registerRoutes(r, handlers, jwtAuth, adminAuth, apiKeyAuth, auditLog, stepUpAuth, apiKeyService, subscriptionService, opsService, settingService, cfg, redisClient)
+	registerRoutes(r, handlers, jwtAuth, adminAuth, apiKeyAuth, callAudit, callAuditRuntime, auditLog, stepUpAuth, apiKeyService, subscriptionService, opsService, settingService, cfg, redisClient)
 
 	return r
 }
@@ -99,6 +102,8 @@ func registerRoutes(
 	jwtAuth middleware2.JWTAuthMiddleware,
 	adminAuth middleware2.AdminAuthMiddleware,
 	apiKeyAuth middleware2.APIKeyAuthMiddleware,
+	callAudit middleware2.CallAuditMiddleware,
+	callAuditRuntime *callaudit.Runtime,
 	auditLog middleware2.AuditLogMiddleware,
 	stepUpAuth middleware2.StepUpAuthMiddleware,
 	apiKeyService *service.APIKeyService,
@@ -109,16 +114,17 @@ func registerRoutes(
 	redisClient *redis.Client,
 ) {
 	// 通用路由（健康检查、状态等）
-	routes.RegisterCommonRoutes(r)
+	routes.RegisterCommonRoutes(r, callAuditRuntime)
 
 	// API v1
 	v1 := r.Group("/api/v1")
 
 	// 注册各模块路由
 	routes.RegisterAuthRoutes(v1, h, jwtAuth, auditLog, redisClient, settingService)
-	routes.RegisterUserRoutes(v1, h, jwtAuth, auditLog, settingService)
+	routes.RegisterUserRoutes(v1, h, jwtAuth, apiKeyAuth, auditLog, settingService)
 	routes.RegisterAdminRoutes(v1, h, adminAuth, auditLog, stepUpAuth, settingService)
-	routes.RegisterGatewayRoutes(r, h, apiKeyAuth, apiKeyService, subscriptionService, opsService, settingService, cfg)
+	routes.RegisterCallAuditAdminRoutes(v1, callAuditRuntime, gin.HandlerFunc(adminAuth))
+	routes.RegisterGatewayRoutes(r, h, apiKeyAuth, callAudit, apiKeyService, subscriptionService, opsService, settingService, cfg)
 	routes.RegisterPaymentRoutes(v1, h.Payment, h.PaymentWebhook, h.Admin.Payment, jwtAuth, adminAuth, auditLog, settingService)
 
 	handler.RegisterPageRoutes(v1, cfg.Pricing.DataDir, gin.HandlerFunc(jwtAuth), gin.HandlerFunc(adminAuth), settingService)

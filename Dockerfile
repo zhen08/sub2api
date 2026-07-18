@@ -83,6 +83,12 @@ RUN VERSION_VALUE="${VERSION}" && \
     -o /app/sub2api \
     ./cmd/server
 
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -trimpath \
+    -ldflags="-s -w" \
+    -o /app/call-audit-migrate \
+    ./cmd/call-audit-migrate
+
 # -----------------------------------------------------------------------------
 # Stage 3: PostgreSQL Client (version-matched with docker-compose)
 # -----------------------------------------------------------------------------
@@ -126,6 +132,7 @@ WORKDIR /app
 
 # Copy binary/resources with ownership to avoid extra full-layer chown copy
 COPY --from=backend-builder --chown=sub2api:sub2api /app/sub2api /app/sub2api
+COPY --from=backend-builder --chown=sub2api:sub2api /app/call-audit-migrate /app/call-audit-migrate
 COPY --from=backend-builder --chown=sub2api:sub2api /app/backend/resources /app/resources
 
 # Create data directory

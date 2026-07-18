@@ -53,6 +53,14 @@ export default {
       crsUsername: 'Username',
       crsPassword: 'Password',
       syncProxies: 'Also sync proxies (match by host/port/auth or create)',
+      crsSourcePriorityMode: 'CRS priority field semantics',
+      crsPriorityModePriority: 'Priority (lower values schedule first)',
+      crsPriorityModeWeight: 'Legacy weight (import all as priority 50)',
+      crsPriorityModeWeightHint:
+        'Use this for a customized CRS where priority was a scheduling weight. The source value is retained as extra.crs_priority; weighted scheduling is not enabled.',
+      crsRefreshOAuth: 'Refresh OAuth credentials after sync',
+      crsRefreshOAuthDisabledHint:
+        'Recommended during migration while CRS may still be running, to avoid both systems refreshing the same credentials.',
       syncNow: 'Sync Now',
       syncing: 'Syncing...',
       syncMissingFields: 'Please fill base URL, username and password',

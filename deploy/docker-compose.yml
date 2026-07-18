@@ -19,6 +19,8 @@ services:
     image: sub2api:latest
     container_name: sub2api
     restart: unless-stopped
+    # 5s HTTP drain + 20s audit/runtime cleanup, with margin before SIGKILL.
+    stop_grace_period: 35s
     ulimits:
       nofile:
         soft: 100000
@@ -167,6 +169,34 @@ services:
       - GATEWAY_IMAGE_CONCURRENCY_OVERFLOW_MODE=${GATEWAY_IMAGE_CONCURRENCY_OVERFLOW_MODE:-reject}
       - GATEWAY_IMAGE_CONCURRENCY_WAIT_TIMEOUT_SECONDS=${GATEWAY_IMAGE_CONCURRENCY_WAIT_TIMEOUT_SECONDS:-30}
       - GATEWAY_IMAGE_CONCURRENCY_MAX_WAITING_REQUESTS=${GATEWAY_IMAGE_CONCURRENCY_MAX_WAITING_REQUESTS:-100}
+
+      # =======================================================================
+      # Full AI Call Audit (disabled by default)
+      # =======================================================================
+      - CALL_AUDIT_ENABLED=${CALL_AUDIT_ENABLED:-false}
+      - CALL_AUDIT_RETENTION_DAYS=${CALL_AUDIT_RETENTION_DAYS:-180}
+      - CALL_AUDIT_FAILURE_POLICY=${CALL_AUDIT_FAILURE_POLICY:-nonblocking}
+      - CALL_AUDIT_POSTGRES_URL=${CALL_AUDIT_POSTGRES_URL:-}
+      - CALL_AUDIT_SPOOL_DIR=/app/data/audit-spool
+      - CALL_AUDIT_OBJECT_KEY_PREFIX=${CALL_AUDIT_OBJECT_KEY_PREFIX:-ai-call-audit}
+      - CALL_AUDIT_MAX_ARTIFACT_BYTES=${CALL_AUDIT_MAX_ARTIFACT_BYTES:-134217728}
+      - CALL_AUDIT_DISK_HIGH_WATERMARK_PERCENT=${CALL_AUDIT_DISK_HIGH_WATERMARK_PERCENT:-90}
+      - CALL_AUDIT_DISK_MIN_FREE_BYTES=${CALL_AUDIT_DISK_MIN_FREE_BYTES:-2147483648}
+      - CALL_AUDIT_USAGE_WAIT_TIMEOUT_MS=${CALL_AUDIT_USAGE_WAIT_TIMEOUT_MS:-2000}
+      - CALL_AUDIT_RETENTION_CLEANUP_ENABLED=${CALL_AUDIT_RETENTION_CLEANUP_ENABLED:-false}
+      - CALL_AUDIT_WORKER_ENABLED=${CALL_AUDIT_WORKER_ENABLED:-true}
+      - CALL_AUDIT_WORKER_MAX_ATTEMPTS=${CALL_AUDIT_WORKER_MAX_ATTEMPTS:-5}
+      - CALL_AUDIT_WORKER_BATCH_SIZE=${CALL_AUDIT_WORKER_BATCH_SIZE:-10}
+      - CALL_AUDIT_WORKER_POLL_INTERVAL_MS=${CALL_AUDIT_WORKER_POLL_INTERVAL_MS:-1000}
+      - CALL_AUDIT_WORKER_RETRY_INITIAL_DELAY_MS=${CALL_AUDIT_WORKER_RETRY_INITIAL_DELAY_MS:-1000}
+      - CALL_AUDIT_WORKER_RETRY_MAX_DELAY_MS=${CALL_AUDIT_WORKER_RETRY_MAX_DELAY_MS:-300000}
+      - CALL_AUDIT_WORKER_CLAIM_TIMEOUT_SECONDS=${CALL_AUDIT_WORKER_CLAIM_TIMEOUT_SECONDS:-300}
+      - CALL_AUDIT_S3_ENDPOINT=${CALL_AUDIT_S3_ENDPOINT:-}
+      - CALL_AUDIT_S3_BUCKET=${CALL_AUDIT_S3_BUCKET:-ai-call-audit}
+      - CALL_AUDIT_S3_ACCESS_KEY=${CALL_AUDIT_S3_ACCESS_KEY:-}
+      - CALL_AUDIT_S3_SECRET_KEY=${CALL_AUDIT_S3_SECRET_KEY:-}
+      - CALL_AUDIT_S3_REGION=${CALL_AUDIT_S3_REGION:-us-east-1}
+      - CALL_AUDIT_S3_FORCE_PATH_STYLE=${CALL_AUDIT_S3_FORCE_PATH_STYLE:-true}
     depends_on:
       postgres:
         condition: service_healthy
@@ -190,6 +220,45 @@ services:
       timeout: 10s
       retries: 3
       start_period: 30s
+
+  # Read-only historical/new call-audit query node. It is intentionally
+  # isolated from the inference process and only published on loopback.
+  audit-query:
+    profiles: ["audit-query"]
+    build:
+      context: ../audit-query
+    restart: unless-stopped
+    stop_grace_period: 15s
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    ports:
+      - "127.0.0.1:3100:3100"
+    environment:
+      - AUDIT_QUERY_HOST=0.0.0.0
+      - AUDIT_QUERY_PORT=3100
+      - AUDIT_QUERY_TOKEN_SHA256=${AUDIT_QUERY_TOKEN_SHA256:-}
+      - AUDIT_QUERY_POSTGRES_URL=${AUDIT_QUERY_POSTGRES_URL:-}
+      - AUDIT_QUERY_POSTGRES_POOL_MAX=${AUDIT_QUERY_POSTGRES_POOL_MAX:-5}
+      - AUDIT_QUERY_POSTGRES_STATEMENT_TIMEOUT_MS=${AUDIT_QUERY_POSTGRES_STATEMENT_TIMEOUT_MS:-30000}
+      - AUDIT_QUERY_S3_ENDPOINT=${AUDIT_QUERY_S3_ENDPOINT:-}
+      - AUDIT_QUERY_S3_BUCKET=${AUDIT_QUERY_S3_BUCKET:-ai-call-audit}
+      - AUDIT_QUERY_S3_ACCESS_KEY=${AUDIT_QUERY_S3_ACCESS_KEY:-}
+      - AUDIT_QUERY_S3_SECRET_KEY=${AUDIT_QUERY_S3_SECRET_KEY:-}
+      - AUDIT_QUERY_S3_REGION=${AUDIT_QUERY_S3_REGION:-us-east-1}
+      - AUDIT_QUERY_OBJECT_KEY_PREFIX=${AUDIT_QUERY_OBJECT_KEY_PREFIX:-ai-call-audit}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-T", "5", "-O", "/dev/null", "http://127.0.0.1:3100/readyz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - sub2api-network
 
   # ===========================================================================
   # PostgreSQL Database

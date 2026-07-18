@@ -1,0 +1,8 @@
+node_modules
+npm-debug.log*
+.env
+tests
+docs
+.eslintrc.cjs
+.prettierrc
+compose.yml

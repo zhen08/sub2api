@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/Wei-Shaw/sub2api/internal/callaudit"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
@@ -100,6 +101,9 @@ func usageRecordContext(parent context.Context, base context.Context) context.Co
 	if requestID, _ := parent.Value(ctxkey.RequestID).(string); strings.TrimSpace(requestID) != "" {
 		base = context.WithValue(base, ctxkey.RequestID, strings.TrimSpace(requestID))
 	}
+	if session, ok := callaudit.SessionFromContext(parent); ok {
+		base = callaudit.WithSession(base, session)
+	}
 	return base
 }
 
@@ -107,7 +111,14 @@ func wrapUsageRecordTaskContext(parent context.Context, task service.UsageRecord
 	if task == nil {
 		return nil
 	}
+	var complete func(callaudit.Usage)
+	if session, ok := callaudit.SessionFromContext(parent); ok {
+		complete, _ = session.BeginUsage()
+	}
 	return func(ctx context.Context) {
+		if complete != nil {
+			defer complete(callaudit.Usage{})
+		}
 		task(usageRecordContext(parent, ctx))
 	}
 }

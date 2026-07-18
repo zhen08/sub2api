@@ -40,31 +40,11 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 			return
 		}
 
-		// 尝试从Authorization header中提取API key (Bearer scheme)
-		authHeader := c.GetHeader("Authorization")
-		var apiKeyString string
-
-		if authHeader != "" {
-			// 验证Bearer scheme
-			parts := strings.SplitN(authHeader, " ", 2)
-			if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
-				apiKeyString = strings.TrimSpace(parts[1])
-			}
-		}
-
-		// 如果Authorization header中没有，尝试从x-api-key header中提取
-		if apiKeyString == "" {
-			apiKeyString = c.GetHeader("x-api-key")
-		}
-
-		// 如果x-api-key header中没有，尝试从x-goog-api-key header中提取（Gemini CLI兼容）
-		if apiKeyString == "" {
-			apiKeyString = c.GetHeader("x-goog-api-key")
-		}
+		apiKeyString := extractAPIKeyForGateway(c)
 
 		// 如果所有header都没有API key
 		if apiKeyString == "" {
-			AbortWithError(c, 401, "API_KEY_REQUIRED", "API key is required in Authorization header (Bearer scheme), x-api-key header, or x-goog-api-key header")
+			AbortWithError(c, 401, "API_KEY_REQUIRED", "API key is required in x-api-key, x-goog-api-key, Authorization, or api-key header")
 			return
 		}
 
@@ -132,7 +112,7 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		// Async image task polling only reads data that already belongs to the
 		// authenticated key and must remain available after the completed
 		// generation consumes the key's remaining balance.
-		skipBilling := c.Request.URL.Path == "/v1/usage" || billingInfoRequest || isAsyncImageTaskRead(c.Request.Method, c.Request.URL.Path)
+		skipBilling := isAPIKeySelfServiceRead(c.Request.Method, c.Request.URL.Path) || billingInfoRequest || isAsyncImageTaskRead(c.Request.Method, c.Request.URL.Path)
 
 		// ── 4. SimpleMode → early return ─────────────────────────────
 
@@ -250,11 +230,43 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 	}
 }
 
+// extractAPIKeyForGateway preserves the claude-relay-service header contract.
+// Query-string keys remain deliberately rejected by the caller.
+func extractAPIKeyForGateway(c *gin.Context) string {
+	if c == nil {
+		return ""
+	}
+	if key := strings.TrimSpace(c.GetHeader("x-api-key")); key != "" {
+		return key
+	}
+	if key := strings.TrimSpace(c.GetHeader("x-goog-api-key")); key != "" {
+		return key
+	}
+	if authorization := strings.TrimSpace(c.GetHeader("Authorization")); authorization != "" {
+		parts := strings.SplitN(authorization, " ", 2)
+		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+			return strings.TrimSpace(parts[1])
+		}
+		// Older CRS clients sent the API key as a bare Authorization value.
+		return authorization
+	}
+	return strings.TrimSpace(c.GetHeader("api-key"))
+}
+
 func isAsyncImageTaskRead(method, path string) bool {
 	if method != http.MethodGet {
 		return false
 	}
 	return strings.HasPrefix(path, "/v1/images/tasks/") || strings.HasPrefix(path, "/images/tasks/")
+}
+
+func isAPIKeySelfServiceRead(method, path string) bool {
+	if method != http.MethodGet {
+		return false
+	}
+	path = strings.ToLower(strings.TrimSuffix(strings.TrimSpace(path), "/"))
+	return strings.HasSuffix(path, "/usage") || strings.HasSuffix(path, "/key-info") ||
+		strings.HasSuffix(path, "/me")
 }
 
 // GetAPIKeyFromContext 从上下文中获取API key

@@ -14,7 +14,16 @@ api.sub2api.com {
 	# =========================================================================
 	# 反向代理配置
 	# =========================================================================
-	reverse_proxy localhost:8080 {
+	# Call Audit 查询 sidecar 仅绑定主机 loopback；handle_path 会在转发前
+	# 去掉 /audit-query 前缀。导出是 gzip NDJSON 流，禁用代理缓冲。
+	handle_path /audit-query/* {
+		reverse_proxy 127.0.0.1:3100 {
+			flush_interval -1
+		}
+	}
+
+	handle {
+		reverse_proxy localhost:8080 {
 		# 健康检查
 		health_uri /health
 		health_interval 30s
@@ -49,6 +58,7 @@ api.sub2api.com {
 		fail_duration 30s
 		max_fails 3
 		unhealthy_status 500 502 503 504
+		}
 	}
 
 	# =========================================================================

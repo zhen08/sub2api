@@ -83,6 +83,8 @@ func NormalizeInboundEndpoint(path string) string {
 		return EndpointAlphaSearch
 	case strings.Contains(path, EndpointChatCompletions):
 		return EndpointChatCompletions
+	case path == "/completions" || strings.HasSuffix(path, "/v1/completions"):
+		return EndpointChatCompletions
 	case strings.Contains(path, EndpointMessages):
 		return EndpointMessages
 	case strings.Contains(path, EndpointImagesGenerations) || strings.Contains(path, "/images/generations"):

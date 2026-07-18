@@ -118,11 +118,18 @@ backend/.installed
 tests
 !deploy/tests/
 !deploy/tests/**
+!audit-query/tests/
+!audit-query/tests/*.js
 CLAUDE.md
 .claude
 scripts
 !backend/scripts/
 !backend/scripts/resolve-version.sh
+!audit-query/scripts/
+!audit-query/scripts/*.js
+!skills/query-audit-api/scripts/
+!skills/query-audit-api/scripts/*.py
+skills/query-audit-api/scripts/__pycache__/
 .code-review-state
 #openspec/
 code-reviews/
@@ -136,6 +143,7 @@ docs/*
 !docs/PAYMENT_CN.md
 !docs/ADMIN_PAYMENT_INTEGRATION_API.md
 !docs/ASYNC_IMAGE_TASKS.md
+!docs/call-audit.md
 !docs/legal/
 !docs/legal/*.md
 .serena/

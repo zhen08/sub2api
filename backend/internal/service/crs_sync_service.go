@@ -77,7 +77,23 @@ type SyncFromCRSInput struct {
 	Password           string
 	SyncProxies        bool
 	SelectedAccountIDs []string // if non-empty, only create new accounts with these CRS IDs
+	// SourcePriorityMode controls how CRS's priority field is interpreted.
+	// Empty/"priority" preserves the historical sync behavior. "weight" is
+	// for CRS installations where the field represented a scheduling weight:
+	// sub2api receives neutral priority 50 and the source value is retained in
+	// account extra as crs_priority.
+	SourcePriorityMode string
+	// RefreshOAuth preserves the historical behavior when nil or true. Set it
+	// explicitly to false during migration so CRS and sub2api do not refresh the
+	// same OAuth credentials concurrently.
+	RefreshOAuth *bool
 }
+
+const (
+	CRSSourcePriorityModePriority = "priority"
+	CRSSourcePriorityModeWeight   = "weight"
+	crsNeutralPriority            = 50
+)
 
 type SyncFromCRSItemResult struct {
 	CRSAccountID string `json:"crs_account_id"`
@@ -261,6 +277,12 @@ func (s *CRSSyncService) fetchCRSExport(ctx context.Context, baseURL, username, 
 }
 
 func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput) (*SyncFromCRSResult, error) {
+	priorityMode, err := normalizeCRSSourcePriorityMode(input.SourcePriorityMode)
+	if err != nil {
+		return nil, err
+	}
+	refreshOAuth := shouldRefreshCRSOAuth(input.RefreshOAuth)
+
 	exported, err := s.fetchCRSExport(ctx, input.BaseURL, input.Username, input.Password)
 	if err != nil {
 		return nil, err
@@ -334,7 +356,6 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		if _, exists := credentials["intercept_warmup_requests"]; !exists {
 			credentials["intercept_warmup_requests"] = false
 		}
-		priority := clampPriority(src.Priority)
 		concurrency := 3
 		status := mapCRSStatus(src.IsActive, src.Status)
 
@@ -355,6 +376,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		if accountUUID, ok := src.Credentials["account_uuid"]; ok {
 			extra["account_uuid"] = accountUUID
 		}
+		priority := resolveCRSPriority(src.Priority, priorityMode, extra)
 
 		existing, err := s.accountRepo.GetByCRSAccountID(ctx, src.ID)
 		if err != nil {
@@ -398,7 +420,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 				continue
 			}
 			// 🔄 Refresh OAuth token after creation
-			if targetType == AccountTypeOAuth {
+			if refreshOAuth && targetType == AccountTypeOAuth {
 				if refreshedCreds := s.refreshOAuthToken(ctx, account); refreshedCreds != nil {
 					_ = persistAccountCredentials(ctx, s.accountRepo, account, refreshedCreds)
 				}
@@ -441,7 +463,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		}
 
 		// 🔄 Refresh OAuth token after update
-		if targetType == AccountTypeOAuth {
+		if refreshOAuth && targetType == AccountTypeOAuth {
 			if refreshedCreds := s.refreshOAuthToken(ctx, existing); refreshedCreds != nil {
 				_ = persistAccountCredentials(ctx, s.accountRepo, existing, refreshedCreds)
 			}
@@ -479,7 +501,6 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		}
 
 		credentials := sanitizeCredentialsMap(src.Credentials)
-		priority := clampPriority(src.Priority)
 		concurrency := 3
 		if src.MaxConcurrentTasks > 0 {
 			concurrency = src.MaxConcurrentTasks
@@ -491,6 +512,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 			"crs_kind":       src.Kind,
 			"crs_synced_at":  now,
 		}
+		priority := resolveCRSPriority(src.Priority, priorityMode, extra)
 
 		existing, err := s.accountRepo.GetByCRSAccountID(ctx, src.ID)
 		if err != nil {
@@ -617,7 +639,6 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 				credentials["expires_at"] = t.Unix()
 			}
 		}
-		priority := clampPriority(src.Priority)
 		concurrency := 3
 		status := mapCRSStatus(src.IsActive, src.Status)
 
@@ -635,6 +656,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		if crsEmail, ok := src.Extra["crs_email"]; ok {
 			extra["email"] = crsEmail
 		}
+		priority := resolveCRSPriority(src.Priority, priorityMode, extra)
 
 		existing, err := s.accountRepo.GetByCRSAccountID(ctx, src.ID)
 		if err != nil {
@@ -689,8 +711,10 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 				continue
 			}
 			// 🔄 Refresh OAuth token after creation
-			if refreshedCreds := s.refreshOAuthToken(ctx, account); refreshedCreds != nil {
-				_ = persistAccountCredentials(ctx, s.accountRepo, account, refreshedCreds)
+			if refreshOAuth {
+				if refreshedCreds := s.refreshOAuthToken(ctx, account); refreshedCreds != nil {
+					_ = persistAccountCredentials(ctx, s.accountRepo, account, refreshedCreds)
+				}
 			}
 			item.Action = "created"
 			result.Created++
@@ -720,8 +744,10 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		}
 
 		// 🔄 Refresh OAuth token after update
-		if refreshedCreds := s.refreshOAuthToken(ctx, existing); refreshedCreds != nil {
-			_ = persistAccountCredentials(ctx, s.accountRepo, existing, refreshedCreds)
+		if refreshOAuth {
+			if refreshedCreds := s.refreshOAuthToken(ctx, existing); refreshedCreds != nil {
+				_ = persistAccountCredentials(ctx, s.accountRepo, existing, refreshedCreds)
+			}
 		}
 
 		// 母账号 proxy 经 CRS 改动后同步到其 spark 影子,避免影子保留旧 proxy 出现出站漂移(外审第8轮)。
@@ -775,7 +801,6 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		}
 
 		credentials := sanitizeCredentialsMap(src.Credentials)
-		priority := clampPriority(src.Priority)
 		concurrency := 3
 		status := mapCRSStatus(src.IsActive, src.Status)
 
@@ -786,6 +811,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 		extra["crs_account_id"] = src.ID
 		extra["crs_kind"] = src.Kind
 		extra["crs_synced_at"] = now
+		priority := resolveCRSPriority(src.Priority, priorityMode, extra)
 
 		existing, err := s.accountRepo.GetByCRSAccountID(ctx, src.ID)
 		if err != nil {
@@ -958,7 +984,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 				Extra:       extra,
 				ProxyID:     proxyID,
 				Concurrency: 3,
-				Priority:    clampPriority(src.Priority),
+				Priority:    resolveCRSPriority(src.Priority, priorityMode, extra),
 				Status:      mapCRSStatus(src.IsActive, src.Status),
 				Schedulable: src.Schedulable,
 			}
@@ -969,8 +995,10 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 				result.Items = append(result.Items, item)
 				continue
 			}
-			if refreshedCreds := s.refreshOAuthToken(ctx, account); refreshedCreds != nil {
-				_ = persistAccountCredentials(ctx, s.accountRepo, account, refreshedCreds)
+			if refreshOAuth {
+				if refreshedCreds := s.refreshOAuthToken(ctx, account); refreshedCreds != nil {
+					_ = persistAccountCredentials(ctx, s.accountRepo, account, refreshedCreds)
+				}
 			}
 			item.Action = "created"
 			result.Created++
@@ -996,7 +1024,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 			existing.ProxyID = proxyID
 		}
 		existing.Concurrency = 3
-		existing.Priority = clampPriority(src.Priority)
+		existing.Priority = resolveCRSPriority(src.Priority, priorityMode, extra)
 		existing.Status = mapCRSStatus(src.IsActive, src.Status)
 		existing.Schedulable = src.Schedulable
 
@@ -1008,8 +1036,10 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 			continue
 		}
 
-		if refreshedCreds := s.refreshOAuthToken(ctx, existing); refreshedCreds != nil {
-			_ = persistAccountCredentials(ctx, s.accountRepo, existing, refreshedCreds)
+		if refreshOAuth {
+			if refreshedCreds := s.refreshOAuthToken(ctx, existing); refreshedCreds != nil {
+				_ = persistAccountCredentials(ctx, s.accountRepo, existing, refreshedCreds)
+			}
 		}
 
 		item.Action = "updated"
@@ -1088,7 +1118,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 				Extra:       extra,
 				ProxyID:     proxyID,
 				Concurrency: 3,
-				Priority:    clampPriority(src.Priority),
+				Priority:    resolveCRSPriority(src.Priority, priorityMode, extra),
 				Status:      mapCRSStatus(src.IsActive, src.Status),
 				Schedulable: src.Schedulable,
 			}
@@ -1123,7 +1153,7 @@ func (s *CRSSyncService) SyncFromCRS(ctx context.Context, input SyncFromCRSInput
 			existing.ProxyID = proxyID
 		}
 		existing.Concurrency = 3
-		existing.Priority = clampPriority(src.Priority)
+		existing.Priority = resolveCRSPriority(src.Priority, priorityMode, extra)
 		existing.Status = mapCRSStatus(src.IsActive, src.Status)
 		existing.Schedulable = src.Schedulable
 
@@ -1254,9 +1284,36 @@ func defaultName(name, id string) string {
 
 func clampPriority(priority int) int {
 	if priority < 1 || priority > 100 {
-		return 50
+		return crsNeutralPriority
 	}
 	return priority
+}
+
+func normalizeCRSSourcePriorityMode(mode string) (string, error) {
+	switch strings.ToLower(strings.TrimSpace(mode)) {
+	case "", CRSSourcePriorityModePriority:
+		return CRSSourcePriorityModePriority, nil
+	case CRSSourcePriorityModeWeight:
+		return CRSSourcePriorityModeWeight, nil
+	default:
+		return "", fmt.Errorf("invalid source_priority_mode %q: must be %q or %q", mode, CRSSourcePriorityModePriority, CRSSourcePriorityModeWeight)
+	}
+}
+
+func resolveCRSPriority(sourcePriority int, mode string, extra map[string]any) int {
+	if mode == CRSSourcePriorityModeWeight {
+		if extra != nil {
+			extra["crs_priority"] = sourcePriority
+		}
+		return crsNeutralPriority
+	}
+	return clampPriority(sourcePriority)
+}
+
+func shouldRefreshCRSOAuth(refresh *bool) bool {
+	// nil preserves the pre-option behavior for existing API clients and direct
+	// service callers. Migration callers can explicitly opt out with false.
+	return refresh == nil || *refresh
 }
 
 func sanitizeCredentialsMap(input map[string]any) map[string]any {
@@ -1506,6 +1563,10 @@ type CRSPreviewAccount struct {
 // PreviewFromCRS connects to CRS, fetches all accounts, and classifies them
 // as new or existing by batch-querying local crs_account_id mappings.
 func (s *CRSSyncService) PreviewFromCRS(ctx context.Context, input SyncFromCRSInput) (*PreviewFromCRSResult, error) {
+	if _, err := normalizeCRSSourcePriorityMode(input.SourcePriorityMode); err != nil {
+		return nil, err
+	}
+
 	exported, err := s.fetchCRSExport(ctx, input.BaseURL, input.Username, input.Password)
 	if err != nil {
 		return nil, err

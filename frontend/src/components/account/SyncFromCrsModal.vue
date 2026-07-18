@@ -66,6 +66,31 @@
           />
           {{ t('admin.accounts.syncProxies') }}
         </label>
+
+        <div>
+          <label for="crs-priority-mode" class="input-label">
+            {{ t('admin.accounts.crsSourcePriorityMode') }}
+          </label>
+          <select id="crs-priority-mode" v-model="form.source_priority_mode" class="input">
+            <option value="priority">{{ t('admin.accounts.crsPriorityModePriority') }}</option>
+            <option value="weight">{{ t('admin.accounts.crsPriorityModeWeight') }}</option>
+          </select>
+          <p v-if="form.source_priority_mode === 'weight'" class="mt-1 text-xs text-gray-500 dark:text-dark-400">
+            {{ t('admin.accounts.crsPriorityModeWeightHint') }}
+          </p>
+        </div>
+
+        <label class="flex items-center gap-2 text-sm text-gray-700 dark:text-dark-300">
+          <input
+            v-model="form.refresh_oauth"
+            type="checkbox"
+            class="rounded border-gray-300 dark:border-dark-600"
+          />
+          {{ t('admin.accounts.crsRefreshOAuth') }}
+        </label>
+        <p v-if="!form.refresh_oauth" class="-mt-2 text-xs text-amber-600 dark:text-amber-400">
+          {{ t('admin.accounts.crsRefreshOAuthDisabledHint') }}
+        </p>
       </div>
     </form>
 
@@ -144,6 +169,22 @@
         <span>{{ t('admin.accounts.syncProxies') }}:</span>
         <span :class="form.sync_proxies ? 'text-green-600 dark:text-green-400' : 'text-gray-400 dark:text-dark-500'">
           {{ form.sync_proxies ? t('common.yes') : t('common.no') }}
+        </span>
+      </div>
+      <div class="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-500 dark:text-dark-400">
+        <span>
+          {{ t('admin.accounts.crsSourcePriorityMode') }}:
+          <strong class="font-medium text-gray-700 dark:text-dark-300">
+            {{ form.source_priority_mode === 'weight'
+              ? t('admin.accounts.crsPriorityModeWeight')
+              : t('admin.accounts.crsPriorityModePriority') }}
+          </strong>
+        </span>
+        <span>
+          {{ t('admin.accounts.crsRefreshOAuth') }}:
+          <strong class="font-medium text-gray-700 dark:text-dark-300">
+            {{ form.refresh_oauth ? t('common.yes') : t('common.no') }}
+          </strong>
         </span>
       </div>
 
@@ -275,7 +316,12 @@ const form = reactive({
   base_url: '',
   username: '',
   password: '',
-  sync_proxies: true
+  sync_proxies: true,
+  source_priority_mode: 'priority' as 'priority' | 'weight',
+  // The migration-safe UI default avoids racing CRS while it may still own
+  // the same refresh token. API callers that omit the new field retain the
+  // historical backend behavior.
+  refresh_oauth: false
 })
 
 const hasNewButNoneSelected = computed(() => {
@@ -302,6 +348,8 @@ watch(
       form.username = ''
       form.password = ''
       form.sync_proxies = true
+      form.source_priority_mode = 'priority'
+      form.refresh_oauth = false
     }
   }
 )
@@ -349,7 +397,9 @@ const handlePreview = async () => {
     const res = await adminAPI.accounts.previewFromCrs({
       base_url: form.base_url.trim(),
       username: form.username.trim(),
-      password: form.password
+      password: form.password,
+      source_priority_mode: form.source_priority_mode,
+      refresh_oauth: form.refresh_oauth
     })
     previewResult.value = res
     // Auto-select all new accounts
@@ -375,7 +425,9 @@ const handleSync = async () => {
       username: form.username.trim(),
       password: form.password,
       sync_proxies: form.sync_proxies,
-      selected_account_ids: [...selectedIds.value]
+      selected_account_ids: [...selectedIds.value],
+      source_priority_mode: form.source_priority_mode,
+      refresh_oauth: form.refresh_oauth
     })
     result.value = res
     currentStep.value = 'result'

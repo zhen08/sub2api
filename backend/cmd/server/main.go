@@ -182,7 +182,12 @@ func runMainServer() {
 	defer cancel()
 
 	if err := app.Server.Shutdown(ctx); err != nil {
-		log.Fatalf("Server forced to shutdown: %v", err)
+		// Do not use log.Fatal here: it calls os.Exit and skips the deferred
+		// cleanup that drains Call Audit finalizers and persists ready manifests.
+		log.Printf("Graceful server shutdown timed out: %v", err)
+		if closeErr := app.Server.Close(); closeErr != nil {
+			log.Printf("Forced server close failed: %v", closeErr)
+		}
 	}
 
 	log.Println("Server exited")

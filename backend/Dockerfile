@@ -18,6 +18,8 @@ COPY . .
 RUN VERSION_VALUE="$(./scripts/resolve-version.sh)" && \
     go build -ldflags="-s -w -X main.Version=${VERSION_VALUE}" -o main ./cmd/server/
 
+RUN go build -ldflags="-s -w" -o call-audit-migrate ./cmd/call-audit-migrate/
+
 # 暴露端口
 EXPOSE 8080
 

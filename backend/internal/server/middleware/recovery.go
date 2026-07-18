@@ -18,30 +18,37 @@ import (
 // when the client connection is already gone.
 func Recovery() gin.HandlerFunc {
 	return gin.CustomRecoveryWithWriter(gin.DefaultErrorWriter, func(c *gin.Context, recovered any) {
-		recoveredErr, _ := recovered.(error)
-
-		if isBrokenPipe(recoveredErr) {
-			if recoveredErr != nil {
-				_ = c.Error(recoveredErr)
-			}
-			c.Abort()
-			return
-		}
-
-		if c.Writer.Written() {
-			c.Abort()
-			return
-		}
-
-		response.ErrorWithDetails(
-			c,
-			http.StatusInternalServerError,
-			infraerrors.UnknownMessage,
-			infraerrors.UnknownReason,
-			nil,
-		)
-		c.Abort()
+		writeRecoveredHTTPResponse(c, recovered)
 	})
+}
+
+// writeRecoveredHTTPResponse is also used by Call Audit before it snapshots a
+// panic response. The outer Gin recovery still receives the re-panicked value
+// for logging, but sees an already-written response and does not duplicate it.
+func writeRecoveredHTTPResponse(c *gin.Context, recovered any) {
+	if c == nil {
+		return
+	}
+	recoveredErr, _ := recovered.(error)
+	if isBrokenPipe(recoveredErr) {
+		if recoveredErr != nil {
+			_ = c.Error(recoveredErr)
+		}
+		c.Abort()
+		return
+	}
+	if c.Writer.Written() {
+		c.Abort()
+		return
+	}
+	response.ErrorWithDetails(
+		c,
+		http.StatusInternalServerError,
+		infraerrors.UnknownMessage,
+		infraerrors.UnknownReason,
+		nil,
+	)
+	c.Abort()
 }
 
 func isBrokenPipe(err error) bool {

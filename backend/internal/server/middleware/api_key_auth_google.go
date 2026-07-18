@@ -178,32 +178,17 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 	}
 }
 
-// extractAPIKeyForGoogle extracts API key for Google/Gemini endpoints.
-// Priority: x-goog-api-key > Authorization: Bearer > x-api-key > query key
-// This allows OpenClaw and other clients using Bearer auth to work with Gemini endpoints.
+// extractAPIKeyForGoogle keeps the same header contract and priority as the
+// other gateway aliases, then preserves Sub2API's existing Gemini-only query
+// key fallback. The migration gate still requires query-key CRS traffic to be
+// eliminated before cutover.
 func extractAPIKeyForGoogle(c *gin.Context) string {
-	// 1) preferred: Gemini native header
-	if k := strings.TrimSpace(c.GetHeader("x-goog-api-key")); k != "" {
-		return k
+	if key := extractAPIKeyForGateway(c); key != "" {
+		return key
 	}
 
-	// 2) fallback: Authorization: Bearer <key>
-	auth := strings.TrimSpace(c.GetHeader("Authorization"))
-	if auth != "" {
-		parts := strings.SplitN(auth, " ", 2)
-		if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
-			if k := strings.TrimSpace(parts[1]); k != "" {
-				return k
-			}
-		}
-	}
-
-	// 3) x-api-key header (backward compatibility)
-	if k := strings.TrimSpace(c.GetHeader("x-api-key")); k != "" {
-		return k
-	}
-
-	// 4) query parameter key (for specific paths)
+	// Existing native Gemini compatibility only. Generic and legacy aliases do
+	// not accept query-string API keys.
 	if allowGoogleQueryKey(c.Request.URL.Path) {
 		if v := strings.TrimSpace(c.Query("key")); v != "" {
 			return v

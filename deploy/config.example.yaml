@@ -1211,3 +1211,36 @@ image_storage:
   presign_expiry_hours: 24
   # 当上游返回的是图片 url 时，下载该图片再转存的字节上限（默认 32MB）
   max_download_bytes: 33554432
+
+# =============================================================================
+# Full AI Call Audit（完整 AI 调用审计）
+# =============================================================================
+# 首次切换保持 disabled，完成 audit-query 历史查询验证后再启用。
+call_audit:
+  enabled: false
+  retention_days: 180
+  failure_policy: "nonblocking"
+  postgres_url: ""
+  spool_dir: "/app/data/audit-spool"
+  object_key_prefix: "ai-call-audit"
+  max_artifact_bytes: 134217728
+  disk_high_watermark_percent: 90
+  disk_min_free_bytes: 2147483648
+  usage_wait_timeout_ms: 2000
+  # 保留期清理首轮上线必须保持关闭；先运行 call-audit-migrate --retention-dry-run。
+  retention_cleanup_enabled: false
+  worker:
+    enabled: true
+    max_attempts: 5
+    batch_size: 10
+    poll_interval_ms: 1000
+    retry_initial_delay_ms: 1000
+    retry_max_delay_ms: 300000
+    claim_timeout_seconds: 300
+  s3:
+    endpoint: ""
+    bucket: "ai-call-audit"
+    access_key: ""
+    secret_key: ""
+    region: "us-east-1"
+    force_path_style: true

@@ -1037,12 +1037,16 @@ type SyncFromCRSRequest struct {
 	Password           string   `json:"password" binding:"required"`
 	SyncProxies        *bool    `json:"sync_proxies"`
 	SelectedAccountIDs []string `json:"selected_account_ids"`
+	SourcePriorityMode string   `json:"source_priority_mode" binding:"omitempty,oneof=priority weight"`
+	RefreshOAuth       *bool    `json:"refresh_oauth"`
 }
 
 type PreviewFromCRSRequest struct {
-	BaseURL  string `json:"base_url" binding:"required"`
-	Username string `json:"username" binding:"required"`
-	Password string `json:"password" binding:"required"`
+	BaseURL            string `json:"base_url" binding:"required"`
+	Username           string `json:"username" binding:"required"`
+	Password           string `json:"password" binding:"required"`
+	SourcePriorityMode string `json:"source_priority_mode" binding:"omitempty,oneof=priority weight"`
+	RefreshOAuth       *bool  `json:"refresh_oauth"`
 }
 
 // Test handles testing account connectivity with SSE streaming
@@ -1122,6 +1126,8 @@ func (h *AccountHandler) SyncFromCRS(c *gin.Context) {
 		Password:           req.Password,
 		SyncProxies:        syncProxies,
 		SelectedAccountIDs: req.SelectedAccountIDs,
+		SourcePriorityMode: req.SourcePriorityMode,
+		RefreshOAuth:       req.RefreshOAuth,
 	})
 	if err != nil {
 		// Provide detailed error message for CRS sync failures
@@ -1142,9 +1148,11 @@ func (h *AccountHandler) PreviewFromCRS(c *gin.Context) {
 	}
 
 	result, err := h.crsSyncService.PreviewFromCRS(c.Request.Context(), service.SyncFromCRSInput{
-		BaseURL:  req.BaseURL,
-		Username: req.Username,
-		Password: req.Password,
+		BaseURL:            req.BaseURL,
+		Username:           req.Username,
+		Password:           req.Password,
+		SourcePriorityMode: req.SourcePriorityMode,
+		RefreshOAuth:       req.RefreshOAuth,
 	})
 	if err != nil {
 		response.InternalError(c, "CRS preview failed: "+err.Error())

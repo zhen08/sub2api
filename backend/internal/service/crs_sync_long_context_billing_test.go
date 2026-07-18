@@ -23,6 +23,7 @@ type crsOpenAILongContextSource struct {
 	collection  string
 	credentials map[string]any
 	extra       map[string]any
+	priority    int
 }
 
 func newCRSLongContextAccountRepo(existing ...*Account) *crsLongContextAccountRepo {
@@ -128,6 +129,89 @@ func TestCRSSyncOpenAILongContextBilling(t *testing.T) {
 	}
 }
 
+func TestCRSSyncWeightModeNeutralizesEveryImportedAccountKind(t *testing.T) {
+	repo := newCRSLongContextAccountRepo()
+	server := httptest.NewServer(http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		response.Header().Set("Content-Type", "application/json")
+		if request.URL.Path == "/web/auth/login" {
+			_, _ = response.Write([]byte(`{"success":true,"token":"admin-token"}`))
+			return
+		}
+		require.Equal(t, "/admin/sync/export-accounts", request.URL.Path)
+		account := func(id string, priority int, credentials map[string]any) map[string]any {
+			return map[string]any{
+				"kind":        id + "-kind",
+				"id":          id,
+				"name":        id,
+				"isActive":    true,
+				"schedulable": true,
+				"priority":    priority,
+				"credentials": credentials,
+			}
+		}
+		claudeOAuth := account("claude-oauth", 11, map[string]any{"access_token": "claude-token"})
+		claudeOAuth["authType"] = AccountTypeOAuth
+		openAIOAuth := account("openai-oauth", 33, map[string]any{"access_token": "openai-token"})
+		openAIOAuth["authType"] = AccountTypeOAuth
+		geminiOAuth := account("gemini-oauth", 55, map[string]any{"refresh_token": "gemini-refresh"})
+		geminiOAuth["authType"] = AccountTypeOAuth
+
+		require.NoError(t, json.NewEncoder(response).Encode(map[string]any{
+			"success": true,
+			"data": map[string]any{
+				"claudeAccounts":          []any{claudeOAuth},
+				"claudeConsoleAccounts":   []any{account("claude-console", 22, map[string]any{"api_key": "claude-key"})},
+				"openaiOAuthAccounts":     []any{openAIOAuth},
+				"openaiResponsesAccounts": []any{account("openai-api-key", 44, map[string]any{"api_key": "openai-key"})},
+				"geminiOAuthAccounts":     []any{geminiOAuth},
+				"geminiApiKeyAccounts":    []any{account("gemini-api-key", 66, map[string]any{"api_key": "gemini-key"})},
+			},
+		}))
+	}))
+	t.Cleanup(server.Close)
+
+	cfg := &config.Config{}
+	cfg.Security.URLAllowlist.AllowInsecureHTTP = true
+	refreshOAuth := false
+	syncService := NewCRSSyncService(repo, nil, nil, nil, nil, cfg)
+	result, err := syncService.SyncFromCRS(context.Background(), SyncFromCRSInput{
+		BaseURL:            server.URL,
+		Username:           "admin",
+		Password:           "password",
+		SourcePriorityMode: CRSSourcePriorityModeWeight,
+		RefreshOAuth:       &refreshOAuth,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 6, result.Created)
+	require.Zero(t, result.Failed)
+
+	wantSourcePriority := map[string]int{
+		"claude-oauth": 11, "claude-console": 22, "openai-oauth": 33,
+		"openai-api-key": 44, "gemini-oauth": 55, "gemini-api-key": 66,
+	}
+	for id, sourcePriority := range wantSourcePriority {
+		stored := repo.accounts[id]
+		require.NotNil(t, stored, "account %s should be imported", id)
+		require.Equal(t, crsNeutralPriority, stored.Priority, "account %s must not treat the CRS weight as sub2api priority", id)
+		require.Equal(t, sourcePriority, stored.Extra["crs_priority"], "account %s must retain the source value", id)
+	}
+}
+
+func TestCRSSyncDefaultPriorityModePreservesHistoricalPriority(t *testing.T) {
+	repo := newCRSLongContextAccountRepo()
+	result := runCRSOpenAILongContextSync(t, repo, crsOpenAILongContextSource{
+		collection:  "openaiResponsesAccounts",
+		credentials: map[string]any{"api_key": "sk-test"},
+		priority:    17,
+	})
+
+	require.Equal(t, 1, result.Created)
+	stored := repo.accounts["crs-openai-1"]
+	require.NotNil(t, stored)
+	require.Equal(t, 17, stored.Priority)
+	require.NotContains(t, stored.Extra, "crs_priority", "default priority mode must not reinterpret the source field as a weight")
+}
+
 func runCRSOpenAILongContextSync(t *testing.T, repo AccountRepository, source crsOpenAILongContextSource) *SyncFromCRSResult {
 	t.Helper()
 	account := map[string]any{
@@ -136,6 +220,7 @@ func runCRSOpenAILongContextSync(t *testing.T, repo AccountRepository, source cr
 		"name":        "OpenAI CRS",
 		"isActive":    true,
 		"schedulable": true,
+		"priority":    source.priority,
 		"credentials": source.credentials,
 	}
 	if source.extra != nil {

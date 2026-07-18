@@ -566,10 +566,14 @@ export interface PreviewFromCRSResult {
   existing_accounts: CRSPreviewAccount[]
 }
 
+export type CRSSourcePriorityMode = 'priority' | 'weight'
+
 export async function previewFromCrs(params: {
   base_url: string
   username: string
   password: string
+  source_priority_mode?: CRSSourcePriorityMode
+  refresh_oauth?: boolean
 }): Promise<PreviewFromCRSResult> {
   const { data } = await apiClient.post<PreviewFromCRSResult>('/admin/accounts/sync/crs/preview', params)
   return data
@@ -581,6 +585,8 @@ export async function syncFromCrs(params: {
   password: string
   sync_proxies?: boolean
   selected_account_ids?: string[]
+  source_priority_mode?: CRSSourcePriorityMode
+  refresh_oauth?: boolean
 }): Promise<{
   created: number
   updated: number
@@ -607,7 +613,7 @@ export async function syncFromCrs(params: {
       error?: string
     }>
   }>('/admin/accounts/sync/crs', params, {
-    timeout: 180000 // 180s timeout: sync refreshes each existing account's OAuth token serially
+    timeout: 180000 // 180s timeout: OAuth refresh may run serially when refresh_oauth is enabled
   })
   return data
 }

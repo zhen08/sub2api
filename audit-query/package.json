@@ -1,0 +1,37 @@
+{
+  "name": "sub2api-audit-query",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Read-only query service for Sub2API call-audit metadata and artifacts",
+  "main": "src/auditQueryApp.js",
+  "scripts": {
+    "start": "node src/auditQueryApp.js",
+    "test": "jest --runInBand --no-watchman",
+    "test:unit": "jest --runInBand --no-watchman --testPathIgnorePatterns=auditQuery.integration.test.js",
+    "test:integration": "RUN_AUDIT_QUERY_INTEGRATION=true jest --runInBand --no-watchman tests/auditQuery.integration.test.js",
+    "lint": "eslint src scripts tests --ext .js",
+    "format:check": "prettier --check \"{src,scripts,tests}/**/*.js\"",
+    "migrate:check": "node scripts/migrate-audit-query-schema.js --check",
+    "migrate:apply": "node scripts/migrate-audit-query-schema.js --apply"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "3.883.0",
+    "dotenv": "16.6.1",
+    "express": "4.21.2",
+    "helmet": "7.2.0",
+    "pg": "8.22.0",
+    "uuid": "9.0.1"
+  },
+  "devDependencies": {
+    "eslint": "8.57.1",
+    "eslint-config-prettier": "10.1.8",
+    "eslint-plugin-prettier": "5.5.4",
+    "jest": "29.7.0",
+    "prettier": "3.6.2",
+    "supertest": "6.3.4"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "license": "MIT"
+}

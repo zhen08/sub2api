@@ -53,6 +53,14 @@ export default {
       crsUsername: '用户名',
       crsPassword: '密码',
       syncProxies: '同时同步代理（按 host/port/账号匹配或自动创建）',
+      crsSourcePriorityMode: 'CRS priority 字段语义',
+      crsPriorityModePriority: '优先级（数值越小越优先）',
+      crsPriorityModeWeight: '旧权重（统一导入为 priority 50）',
+      crsPriorityModeWeightHint:
+        '用于 priority 曾表示调度权重的定制 CRS。原值会保存在 extra.crs_priority 中，但不会启用加权调度。',
+      crsRefreshOAuth: '同步后刷新 OAuth 凭据',
+      crsRefreshOAuthDisabledHint:
+        '迁移期间 CRS 仍可能运行时建议关闭，避免两个系统同时刷新同一份凭据。',
       syncNow: '开始同步',
       syncing: '同步中...',
       syncMissingFields: '请填写服务地址、用户名和密码',

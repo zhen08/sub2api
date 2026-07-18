@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/Wei-Shaw/sub2api/internal/callaudit"
 	"github.com/Wei-Shaw/sub2api/internal/config"
 	"github.com/Wei-Shaw/sub2api/internal/handler"
 	servermiddleware "github.com/Wei-Shaw/sub2api/internal/server/middleware"
@@ -15,13 +16,16 @@ import (
 )
 
 func newGatewayRoutesTestRouter(platform ...string) *gin.Engine {
-	gin.SetMode(gin.TestMode)
-	router := gin.New()
-
 	groupPlatform := service.PlatformOpenAI
 	if len(platform) > 0 && platform[0] != "" {
 		groupPlatform = platform[0]
 	}
+	return newGatewayRoutesTestRouterWithAudit(groupPlatform, nil)
+}
+
+func newGatewayRoutesTestRouterWithAudit(groupPlatform string, callAudit servermiddleware.CallAuditMiddleware) *gin.Engine {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
 
 	RegisterGatewayRoutes(
 		router,
@@ -35,9 +39,11 @@ func newGatewayRoutesTestRouter(platform ...string) *gin.Engine {
 			c.Set(string(servermiddleware.ContextKeyAPIKey), &service.APIKey{
 				GroupID: &groupID,
 				Group:   &service.Group{Platform: groupPlatform},
+				User:    &service.User{ID: 1},
 			})
 			c.Next()
 		}),
+		callAudit,
 		nil,
 		nil,
 		nil,
@@ -64,6 +70,135 @@ func TestGatewayRoutesOpenAIResponsesCompactPathIsRegistered(t *testing.T) {
 		router.ServeHTTP(w, req)
 		require.NotEqual(t, http.StatusNotFound, w.Code, "path=%s should hit OpenAI responses handler", path)
 	}
+}
+
+func TestGatewayRoutesCRSLegacyCompatibilityAliasesAreRegisteredOnce(t *testing.T) {
+	router := newGatewayRoutesTestRouter()
+	routeCounts := make(map[string]int)
+	for _, route := range router.Routes() {
+		routeCounts[route.Method+" "+route.Path]++
+	}
+
+	want := []string{
+		"POST /api/v1/messages",
+		"POST /api/v1/messages/count_tokens",
+		"POST /api/v1/chat/completions",
+		"POST /api/v1/completions",
+		"GET /api/v1/models",
+		"POST /claude/v1/messages",
+		"POST /claude/v1/messages/count_tokens",
+		"POST /claude/v1/completions",
+		"GET /claude/v1/models",
+		"GET /claude/v1/usage",
+		"POST /openai/v1/responses",
+		"POST /openai/v1/responses/*subpath",
+		"GET /openai/v1/responses",
+		"POST /openai/v1/chat/completions",
+		"POST /openai/v1/completions",
+		"POST /openai/v1/embeddings",
+		"GET /openai/v1/models",
+		"GET /openai/v1/usage",
+		"POST /antigravity/api/v1/messages",
+		"POST /antigravity/api/v1/messages/count_tokens",
+		"GET /antigravity/api/v1/models",
+		"GET /antigravity/api/v1/usage",
+		"POST /gemini-cli/api/v1/messages",
+		"POST /gemini-cli/api/v1/messages/count_tokens",
+		"GET /gemini-cli/api/v1/models",
+		"GET /gemini-cli/api/v1/usage",
+	}
+
+	for _, route := range want {
+		require.Equal(t, 1, routeCounts[route], "%s must be registered exactly once", route)
+	}
+}
+
+func TestLegacyCompletionsHandlerMapsPromptWithoutChangingResponseContract(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	router := gin.New()
+	var mapped map[string]any
+	router.POST("/v1/completions", legacyCompletionsHandler(func(c *gin.Context) {
+		require.NoError(t, c.ShouldBindJSON(&mapped))
+		c.JSON(http.StatusOK, gin.H{"object": "chat.completion"})
+	}))
+	recorder := httptest.NewRecorder()
+	request := httptest.NewRequest(http.MethodPost, "/v1/completions", strings.NewReader(`{"prompt":"hello","temperature":0.2}`))
+	request.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusOK, recorder.Code)
+	require.Equal(t, "claude-3-5-sonnet-20241022", mapped["model"])
+	require.Equal(t, float64(1), mapped["n"])
+	messages, ok := mapped["messages"].([]any)
+	require.True(t, ok)
+	require.Equal(t, "hello", messages[0].(map[string]any)["content"])
+
+	recorder = httptest.NewRecorder()
+	request = httptest.NewRequest(http.MethodPost, "/v1/completions", strings.NewReader(`{"model":"gpt"}`))
+	request.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(recorder, request)
+	require.Equal(t, http.StatusBadRequest, recorder.Code)
+}
+
+func TestEveryGatewayPOSTHasExplicitCallAuditPolicy(t *testing.T) {
+	router := newGatewayRoutesTestRouter()
+	for _, route := range router.Routes() {
+		if route.Method != http.MethodPost {
+			continue
+		}
+		if callaudit.ClassifyRoute(route.Method, route.Path).Eligible {
+			continue
+		}
+		path := strings.ToLower(route.Path)
+		intentionallyExcluded := strings.Contains(path, "/count_tokens") ||
+			strings.Contains(path, "/images/") || strings.Contains(path, "/videos/") ||
+			strings.HasSuffix(path, "/alpha/search")
+		// Gemini's action is part of a wildcard segment. The concrete runtime
+		// path is classified from :generateContent/:streamGenerateContent.
+		dynamicGeminiInvocation := strings.HasSuffix(path, "/models/*modelaction")
+		require.True(t, intentionallyExcluded || dynamicGeminiInvocation,
+			"POST %s must be explicitly audited or intentionally excluded", route.Path)
+	}
+	for _, path := range []string{
+		"/v1beta/models/gemini-2.5-pro:generateContent",
+		"/v1beta/models/gemini-2.5-pro:streamGenerateContent?alt=sse",
+		"/antigravity/v1beta/models/gemini-2.5-pro:streamGenerateContent?alt=sse",
+	} {
+		require.True(t, callaudit.ClassifyRoute(http.MethodPost, path).Eligible, path)
+	}
+	require.False(t, callaudit.ClassifyRoute(http.MethodPost, "/v1beta/models/gemini-2.5-pro:countTokens").Eligible)
+}
+
+func TestGatewayRoutesCRSLegacyAliasesRunCallAuditOnceAfterAPIKeyAuth(t *testing.T) {
+	auditCalls := 0
+	authenticatedAuditCalls := 0
+	forcedPlatforms := make([]string, 0, 5)
+	audit := servermiddleware.CallAuditMiddleware(func(c *gin.Context) {
+		auditCalls++
+		if apiKey, ok := servermiddleware.GetAPIKeyFromContext(c); ok && apiKey != nil {
+			authenticatedAuditCalls++
+		}
+		platform, _ := servermiddleware.GetForcePlatformFromContext(c)
+		forcedPlatforms = append(forcedPlatforms, platform)
+		c.Next()
+	})
+	router := newGatewayRoutesTestRouterWithAudit(service.PlatformAnthropic, audit)
+
+	for _, path := range []string{
+		"/api/v1/messages",
+		"/claude/v1/messages",
+		"/openai/v1/responses",
+		"/antigravity/api/v1/messages",
+		"/gemini-cli/api/v1/messages",
+	} {
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(`{"model":"test","messages":[]}`))
+		request.Header.Set("Content-Type", "application/json")
+		router.ServeHTTP(recorder, request)
+	}
+
+	require.Equal(t, 5, auditCalls, "each legacy request must enter call audit exactly once")
+	require.Equal(t, auditCalls, authenticatedAuditCalls, "call audit must run after API-key authentication")
+	require.Equal(t, []string{"", "", service.PlatformOpenAI, service.PlatformAntigravity, service.PlatformGemini}, forcedPlatforms)
 }
 
 func TestGatewayRoutesOpenAIAlphaSearchPathsAreRegistered(t *testing.T) {

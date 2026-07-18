@@ -6,6 +6,52 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestCRSSourcePriorityMode(t *testing.T) {
+	tests := []struct {
+		name       string
+		mode       string
+		source     int
+		wantMode   string
+		wantTarget int
+		wantSource bool
+		wantErr    bool
+	}{
+		{name: "omitted keeps priority semantics", source: 7, wantMode: CRSSourcePriorityModePriority, wantTarget: 7},
+		{name: "explicit priority keeps source", mode: "priority", source: 23, wantMode: CRSSourcePriorityModePriority, wantTarget: 23},
+		{name: "priority still clamps invalid values", mode: "priority", source: 0, wantMode: CRSSourcePriorityModePriority, wantTarget: crsNeutralPriority},
+		{name: "weight neutralizes scheduler priority", mode: "weight", source: 91, wantMode: CRSSourcePriorityModeWeight, wantTarget: crsNeutralPriority, wantSource: true},
+		{name: "weight preserves even out of range source", mode: " WEIGHT ", source: 0, wantMode: CRSSourcePriorityModeWeight, wantTarget: crsNeutralPriority, wantSource: true},
+		{name: "unknown mode rejected", mode: "smooth_weight", wantErr: true},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			mode, err := normalizeCRSSourcePriorityMode(tt.mode)
+			if tt.wantErr {
+				require.Error(t, err)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tt.wantMode, mode)
+			extra := map[string]any{}
+			require.Equal(t, tt.wantTarget, resolveCRSPriority(tt.source, mode, extra))
+			if tt.wantSource {
+				require.Equal(t, tt.source, extra["crs_priority"])
+			} else {
+				require.NotContains(t, extra, "crs_priority")
+			}
+		})
+	}
+}
+
+func TestShouldRefreshCRSOAuthIsBackwardCompatible(t *testing.T) {
+	refresh := true
+	doNotRefresh := false
+	require.True(t, shouldRefreshCRSOAuth(nil), "omitting refresh_oauth must preserve the historical refresh behavior")
+	require.True(t, shouldRefreshCRSOAuth(&refresh))
+	require.False(t, shouldRefreshCRSOAuth(&doNotRefresh))
+}
+
 func TestBuildSelectedSet(t *testing.T) {
 	tests := []struct {
 		name     string

@@ -24,6 +24,7 @@ func TestNormalizeInboundEndpoint(t *testing.T) {
 		// Direct canonical paths.
 		{"/v1/messages", EndpointMessages},
 		{"/v1/chat/completions", EndpointChatCompletions},
+		{"/v1/completions", EndpointChatCompletions},
 		{"/v1/embeddings", EndpointEmbeddings},
 		{"/v1/alpha/search", EndpointAlphaSearch},
 		{"/v1/responses", EndpointResponses},
@@ -38,7 +39,16 @@ func TestNormalizeInboundEndpoint(t *testing.T) {
 
 		// Prefixed paths (antigravity, openai) — root Responses.
 		{"/antigravity/v1/messages", EndpointMessages},
+		{"/api/v1/messages", EndpointMessages},
+		{"/claude/v1/messages", EndpointMessages},
+		{"/antigravity/api/v1/messages", EndpointMessages},
+		{"/gemini-cli/api/v1/messages", EndpointMessages},
 		{"/openai/v1/responses", EndpointResponses},
+		{"/openai/v1/chat/completions", EndpointChatCompletions},
+		{"/api/v1/completions", EndpointChatCompletions},
+		{"/claude/v1/completions", EndpointChatCompletions},
+		{"/openai/v1/completions", EndpointChatCompletions},
+		{"/openai/v1/embeddings", EndpointEmbeddings},
 		{"/openai/v1/images/generations", EndpointImagesGenerations},
 		{"/openai/v1/images/edits", EndpointImagesEdits},
 		{"/antigravity/v1beta/models/gemini:generateContent", EndpointGeminiModels},

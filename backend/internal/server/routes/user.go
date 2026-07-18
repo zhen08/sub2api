@@ -1,6 +1,9 @@
 package routes
 
 import (
+	"net/http"
+	"strings"
+
 	"github.com/Wei-Shaw/sub2api/internal/handler"
 	"github.com/Wei-Shaw/sub2api/internal/server/middleware"
 	"github.com/Wei-Shaw/sub2api/internal/service"
@@ -13,12 +16,14 @@ func RegisterUserRoutes(
 	v1 *gin.RouterGroup,
 	h *handler.Handlers,
 	jwtAuth middleware.JWTAuthMiddleware,
+	apiKeyAuth middleware.APIKeyAuthMiddleware,
 	auditLog middleware.AuditLogMiddleware,
 	settingService *service.SettingService,
 ) {
 	authenticated := v1.Group("")
 	authenticated.Use(gin.HandlerFunc(jwtAuth))
-	authenticated.Use(middleware.BackendModeUserGuard(settingService))
+	backendModeGuard := middleware.BackendModeUserGuard(settingService)
+	authenticated.Use(backendModeGuard)
 	// 用户管理面变更类操作入审计（含 TOTP 启用/禁用、step-up 验证、密码修改等安全事件）
 	authenticated.Use(gin.HandlerFunc(auditLog))
 	{
@@ -86,7 +91,6 @@ func RegisterUserRoutes(
 		// 使用记录
 		usage := authenticated.Group("/usage")
 		{
-			usage.GET("", h.Usage.List)
 			usage.GET("/errors", h.Usage.ListErrors)
 			usage.GET("/errors/:id", h.Usage.GetErrorDetail)
 			usage.GET("/:id", h.Usage.GetByID)
@@ -129,4 +133,65 @@ func RegisterUserRoutes(
 			monitors.GET("/:id/status", h.ChannelMonitor.GetStatus)
 		}
 	}
+
+	// `/api/v1/usage` predates Sub2API's JWT management API in CRS. Dispatch
+	// the same path by credential shape so existing API-key clients and the
+	// frontend's JWT usage list can coexist without duplicate Gin routes.
+	v1.GET("/usage",
+		dualUsageAuth(jwtAuth, apiKeyAuth),
+		conditionalJWTMiddleware(backendModeGuard),
+		conditionalJWTMiddleware(gin.HandlerFunc(auditLog)),
+		func(c *gin.Context) {
+			if _, ok := middleware.GetAPIKeyFromContext(c); ok {
+				h.Gateway.Usage(c)
+				return
+			}
+			h.Usage.List(c)
+		},
+	)
+}
+
+func dualUsageAuth(jwtAuth middleware.JWTAuthMiddleware, apiKeyAuth middleware.APIKeyAuthMiddleware) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if requestUsesAPIKeyCredential(c.Request) && apiKeyAuth != nil {
+			gin.HandlerFunc(apiKeyAuth)(c)
+			return
+		}
+		gin.HandlerFunc(jwtAuth)(c)
+	}
+}
+
+func conditionalJWTMiddleware(next gin.HandlerFunc) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if _, ok := middleware.GetAPIKeyFromContext(c); ok {
+			c.Next()
+			return
+		}
+		if next == nil {
+			c.Next()
+			return
+		}
+		next(c)
+	}
+}
+
+func requestUsesAPIKeyCredential(request *http.Request) bool {
+	if request == nil {
+		return false
+	}
+	for _, header := range []string{"x-api-key", "x-goog-api-key", "api-key"} {
+		if strings.TrimSpace(request.Header.Get(header)) != "" {
+			return true
+		}
+	}
+	authorization := strings.TrimSpace(request.Header.Get("Authorization"))
+	if authorization == "" {
+		return false
+	}
+	parts := strings.SplitN(authorization, " ", 2)
+	if len(parts) == 2 && strings.EqualFold(parts[0], "Bearer") {
+		token := strings.TrimSpace(parts[1])
+		return strings.Count(token, ".") != 2
+	}
+	return true
 }

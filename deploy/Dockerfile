@@ -78,6 +78,12 @@ RUN VERSION_VALUE="${VERSION}" && \
     -o /app/sub2api \
     ./cmd/server
 
+RUN CGO_ENABLED=0 GOOS=linux go build \
+    -trimpath \
+    -ldflags="-s -w" \
+    -o /app/call-audit-migrate \
+    ./cmd/call-audit-migrate
+
 # -----------------------------------------------------------------------------
 # Stage 3: Final Runtime Image
 # -----------------------------------------------------------------------------
@@ -105,6 +111,7 @@ WORKDIR /app
 
 # Copy binary from builder
 COPY --from=backend-builder /app/sub2api /app/sub2api
+COPY --from=backend-builder /app/call-audit-migrate /app/call-audit-migrate
 
 # Create data directory
 RUN mkdir -p /app/data && chown -R sub2api:sub2api /app

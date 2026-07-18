@@ -1,0 +1,4 @@
+interface:
+  display_name: "Audit Query API"
+  short_description: "Query and export Sub2API audit data"
+  default_prompt: "使用 $query-audit-api 查询最近的 Sub2API 审计调用并总结异常。"
