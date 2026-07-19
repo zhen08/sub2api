@@ -640,6 +640,9 @@ func AutoSetupFromEnv() error {
 			logger.LegacyPrintf("setup", "%s", "Admin bootstrap skipped")
 		}
 	}
+	if err := bootstrapAdminAPIKey(&cfg.Database, os.Getenv("ADMIN_API_KEY")); err != nil {
+		return fmt.Errorf("admin API key bootstrap failed: %w", err)
+	}
 
 	// Write config file
 	logger.LegacyPrintf("setup", "%s", "Writing configuration file...")
@@ -656,4 +659,39 @@ func AutoSetupFromEnv() error {
 
 	logger.LegacyPrintf("setup", "%s", "Auto setup completed successfully!")
 	return nil
+}
+
+func bootstrapAdminAPIKey(cfg *DatabaseConfig, key string) error {
+	key = strings.TrimSpace(key)
+	if key == "" {
+		return nil
+	}
+	if len(key) != len(service.AdminAPIKeyPrefix)+64 || !strings.HasPrefix(key, service.AdminAPIKeyPrefix) {
+		return fmt.Errorf("ADMIN_API_KEY must use the admin- prefix followed by 64 hexadecimal characters")
+	}
+	for _, char := range strings.TrimPrefix(key, service.AdminAPIKeyPrefix) {
+		if !strings.ContainsRune("0123456789abcdefABCDEF", char) {
+			return fmt.Errorf("ADMIN_API_KEY must use the admin- prefix followed by 64 hexadecimal characters")
+		}
+	}
+
+	db, err := sql.Open("postgres", buildPostgresDSN(cfg, cfg.DBName))
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if closeErr := db.Close(); closeErr != nil {
+			logger.LegacyPrintf("setup", "failed to close admin API key bootstrap connection: %v", closeErr)
+		}
+	}()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	_, err = db.ExecContext(ctx, `
+		INSERT INTO settings (key, value, updated_at)
+		VALUES ($1, $2, NOW())
+		ON CONFLICT (key) DO UPDATE
+		SET value = EXCLUDED.value, updated_at = NOW()
+	`, service.SettingKeyAdminAPIKey, key)
+	return err
 }

@@ -5,6 +5,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 )
 
 func TestDecideAdminBootstrap(t *testing.T) {
@@ -69,6 +71,12 @@ func TestSetupDefaultAdminConcurrency(t *testing.T) {
 			t.Fatalf("setupDefaultAdminConcurrency()=%d, want %d", got, defaultUserConcurrency)
 		}
 	})
+}
+
+func TestBootstrapAdminAPIKeyValidation(t *testing.T) {
+	require.NoError(t, bootstrapAdminAPIKey(nil, ""))
+	require.ErrorContains(t, bootstrapAdminAPIKey(nil, "admin-not-hex"), "64 hexadecimal")
+	require.ErrorContains(t, bootstrapAdminAPIKey(nil, "admin-"+strings.Repeat("z", 64)), "64 hexadecimal")
 }
 
 func TestSetupMigrationTimeout(t *testing.T) {
