@@ -113,6 +113,46 @@ func (_c *APIKeyCreate) SetNillableStatus(v *string) *APIKeyCreate {
 	return _c
 }
 
+// SetSource sets the "source" field.
+func (_c *APIKeyCreate) SetSource(v string) *APIKeyCreate {
+	_c.mutation.SetSource(v)
+	return _c
+}
+
+// SetNillableSource sets the "source" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableSource(v *string) *APIKeyCreate {
+	if v != nil {
+		_c.SetSource(*v)
+	}
+	return _c
+}
+
+// SetSourceID sets the "source_id" field.
+func (_c *APIKeyCreate) SetSourceID(v string) *APIKeyCreate {
+	_c.mutation.SetSourceID(v)
+	return _c
+}
+
+// SetNillableSourceID sets the "source_id" field if the given value is not nil.
+func (_c *APIKeyCreate) SetNillableSourceID(v *string) *APIKeyCreate {
+	if v != nil {
+		_c.SetSourceID(*v)
+	}
+	return _c
+}
+
+// SetTags sets the "tags" field.
+func (_c *APIKeyCreate) SetTags(v []string) *APIKeyCreate {
+	_c.mutation.SetTags(v)
+	return _c
+}
+
+// SetPermissions sets the "permissions" field.
+func (_c *APIKeyCreate) SetPermissions(v []string) *APIKeyCreate {
+	_c.mutation.SetPermissions(v)
+	return _c
+}
+
 // SetLastUsedAt sets the "last_used_at" field.
 func (_c *APIKeyCreate) SetLastUsedAt(v time.Time) *APIKeyCreate {
 	_c.mutation.SetLastUsedAt(v)
@@ -387,6 +427,14 @@ func (_c *APIKeyCreate) defaults() error {
 		v := apikey.DefaultStatus
 		_c.mutation.SetStatus(v)
 	}
+	if _, ok := _c.mutation.Source(); !ok {
+		v := apikey.DefaultSource
+		_c.mutation.SetSource(v)
+	}
+	if _, ok := _c.mutation.SourceID(); !ok {
+		v := apikey.DefaultSourceID
+		_c.mutation.SetSourceID(v)
+	}
 	if _, ok := _c.mutation.Quota(); !ok {
 		v := apikey.DefaultQuota
 		_c.mutation.SetQuota(v)
@@ -455,6 +503,22 @@ func (_c *APIKeyCreate) check() error {
 	if v, ok := _c.mutation.Status(); ok {
 		if err := apikey.StatusValidator(v); err != nil {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.Source(); !ok {
+		return &ValidationError{Name: "source", err: errors.New(`ent: missing required field "APIKey.source"`)}
+	}
+	if v, ok := _c.mutation.Source(); ok {
+		if err := apikey.SourceValidator(v); err != nil {
+			return &ValidationError{Name: "source", err: fmt.Errorf(`ent: validator failed for field "APIKey.source": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.SourceID(); !ok {
+		return &ValidationError{Name: "source_id", err: errors.New(`ent: missing required field "APIKey.source_id"`)}
+	}
+	if v, ok := _c.mutation.SourceID(); ok {
+		if err := apikey.SourceIDValidator(v); err != nil {
+			return &ValidationError{Name: "source_id", err: fmt.Errorf(`ent: validator failed for field "APIKey.source_id": %w`, err)}
 		}
 	}
 	if _, ok := _c.mutation.Quota(); !ok {
@@ -534,6 +598,22 @@ func (_c *APIKeyCreate) createSpec() (*APIKey, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Status(); ok {
 		_spec.SetField(apikey.FieldStatus, field.TypeString, value)
 		_node.Status = value
+	}
+	if value, ok := _c.mutation.Source(); ok {
+		_spec.SetField(apikey.FieldSource, field.TypeString, value)
+		_node.Source = value
+	}
+	if value, ok := _c.mutation.SourceID(); ok {
+		_spec.SetField(apikey.FieldSourceID, field.TypeString, value)
+		_node.SourceID = value
+	}
+	if value, ok := _c.mutation.Tags(); ok {
+		_spec.SetField(apikey.FieldTags, field.TypeJSON, value)
+		_node.Tags = value
+	}
+	if value, ok := _c.mutation.Permissions(); ok {
+		_spec.SetField(apikey.FieldPermissions, field.TypeJSON, value)
+		_node.Permissions = value
 	}
 	if value, ok := _c.mutation.LastUsedAt(); ok {
 		_spec.SetField(apikey.FieldLastUsedAt, field.TypeTime, value)
@@ -790,6 +870,66 @@ func (u *APIKeyUpsert) SetStatus(v string) *APIKeyUpsert {
 // UpdateStatus sets the "status" field to the value that was provided on create.
 func (u *APIKeyUpsert) UpdateStatus() *APIKeyUpsert {
 	u.SetExcluded(apikey.FieldStatus)
+	return u
+}
+
+// SetSource sets the "source" field.
+func (u *APIKeyUpsert) SetSource(v string) *APIKeyUpsert {
+	u.Set(apikey.FieldSource, v)
+	return u
+}
+
+// UpdateSource sets the "source" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateSource() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldSource)
+	return u
+}
+
+// SetSourceID sets the "source_id" field.
+func (u *APIKeyUpsert) SetSourceID(v string) *APIKeyUpsert {
+	u.Set(apikey.FieldSourceID, v)
+	return u
+}
+
+// UpdateSourceID sets the "source_id" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateSourceID() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldSourceID)
+	return u
+}
+
+// SetTags sets the "tags" field.
+func (u *APIKeyUpsert) SetTags(v []string) *APIKeyUpsert {
+	u.Set(apikey.FieldTags, v)
+	return u
+}
+
+// UpdateTags sets the "tags" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdateTags() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldTags)
+	return u
+}
+
+// ClearTags clears the value of the "tags" field.
+func (u *APIKeyUpsert) ClearTags() *APIKeyUpsert {
+	u.SetNull(apikey.FieldTags)
+	return u
+}
+
+// SetPermissions sets the "permissions" field.
+func (u *APIKeyUpsert) SetPermissions(v []string) *APIKeyUpsert {
+	u.Set(apikey.FieldPermissions, v)
+	return u
+}
+
+// UpdatePermissions sets the "permissions" field to the value that was provided on create.
+func (u *APIKeyUpsert) UpdatePermissions() *APIKeyUpsert {
+	u.SetExcluded(apikey.FieldPermissions)
+	return u
+}
+
+// ClearPermissions clears the value of the "permissions" field.
+func (u *APIKeyUpsert) ClearPermissions() *APIKeyUpsert {
+	u.SetNull(apikey.FieldPermissions)
 	return u
 }
 
@@ -1217,6 +1357,76 @@ func (u *APIKeyUpsertOne) SetStatus(v string) *APIKeyUpsertOne {
 func (u *APIKeyUpsertOne) UpdateStatus() *APIKeyUpsertOne {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.UpdateStatus()
+	})
+}
+
+// SetSource sets the "source" field.
+func (u *APIKeyUpsertOne) SetSource(v string) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetSource(v)
+	})
+}
+
+// UpdateSource sets the "source" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateSource() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateSource()
+	})
+}
+
+// SetSourceID sets the "source_id" field.
+func (u *APIKeyUpsertOne) SetSourceID(v string) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetSourceID(v)
+	})
+}
+
+// UpdateSourceID sets the "source_id" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateSourceID() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateSourceID()
+	})
+}
+
+// SetTags sets the "tags" field.
+func (u *APIKeyUpsertOne) SetTags(v []string) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetTags(v)
+	})
+}
+
+// UpdateTags sets the "tags" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdateTags() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateTags()
+	})
+}
+
+// ClearTags clears the value of the "tags" field.
+func (u *APIKeyUpsertOne) ClearTags() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearTags()
+	})
+}
+
+// SetPermissions sets the "permissions" field.
+func (u *APIKeyUpsertOne) SetPermissions(v []string) *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetPermissions(v)
+	})
+}
+
+// UpdatePermissions sets the "permissions" field to the value that was provided on create.
+func (u *APIKeyUpsertOne) UpdatePermissions() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdatePermissions()
+	})
+}
+
+// ClearPermissions clears the value of the "permissions" field.
+func (u *APIKeyUpsertOne) ClearPermissions() *APIKeyUpsertOne {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearPermissions()
 	})
 }
 
@@ -1855,6 +2065,76 @@ func (u *APIKeyUpsertBulk) SetStatus(v string) *APIKeyUpsertBulk {
 func (u *APIKeyUpsertBulk) UpdateStatus() *APIKeyUpsertBulk {
 	return u.Update(func(s *APIKeyUpsert) {
 		s.UpdateStatus()
+	})
+}
+
+// SetSource sets the "source" field.
+func (u *APIKeyUpsertBulk) SetSource(v string) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetSource(v)
+	})
+}
+
+// UpdateSource sets the "source" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateSource() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateSource()
+	})
+}
+
+// SetSourceID sets the "source_id" field.
+func (u *APIKeyUpsertBulk) SetSourceID(v string) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetSourceID(v)
+	})
+}
+
+// UpdateSourceID sets the "source_id" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateSourceID() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateSourceID()
+	})
+}
+
+// SetTags sets the "tags" field.
+func (u *APIKeyUpsertBulk) SetTags(v []string) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetTags(v)
+	})
+}
+
+// UpdateTags sets the "tags" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdateTags() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdateTags()
+	})
+}
+
+// ClearTags clears the value of the "tags" field.
+func (u *APIKeyUpsertBulk) ClearTags() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearTags()
+	})
+}
+
+// SetPermissions sets the "permissions" field.
+func (u *APIKeyUpsertBulk) SetPermissions(v []string) *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.SetPermissions(v)
+	})
+}
+
+// UpdatePermissions sets the "permissions" field to the value that was provided on create.
+func (u *APIKeyUpsertBulk) UpdatePermissions() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.UpdatePermissions()
+	})
+}
+
+// ClearPermissions clears the value of the "permissions" field.
+func (u *APIKeyUpsertBulk) ClearPermissions() *APIKeyUpsertBulk {
+	return u.Update(func(s *APIKeyUpsert) {
+		s.ClearPermissions()
 	})
 }
 

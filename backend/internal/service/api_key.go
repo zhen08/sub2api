@@ -1,6 +1,7 @@
 package service
 
 import (
+	"strings"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/pkg/ip"
@@ -34,6 +35,10 @@ type APIKey struct {
 	Name        string
 	GroupID     *int64
 	Status      string
+	Source      string
+	SourceID    string
+	Tags        []string
+	Permissions []string
 	IPWhitelist []string
 	IPBlacklist []string
 	// 预编译的 IP 规则，用于认证热路径避免重复 ParseIP/ParseCIDR。
@@ -66,6 +71,22 @@ type APIKey struct {
 
 func (k *APIKey) IsActive() bool {
 	return k.Status == StatusActive
+}
+
+// AllowsPlatform preserves the historical unrestricted behavior for keys
+// without an explicit permission list and enforces a case-insensitive allowlist
+// for externally managed keys.
+func (k *APIKey) AllowsPlatform(platform string) bool {
+	if k == nil || len(k.Permissions) == 0 {
+		return true
+	}
+	platform = strings.ToLower(strings.TrimSpace(platform))
+	for _, permission := range k.Permissions {
+		if strings.ToLower(strings.TrimSpace(permission)) == platform {
+			return true
+		}
+	}
+	return false
 }
 
 // HasRateLimits returns true if any rate limit window is configured

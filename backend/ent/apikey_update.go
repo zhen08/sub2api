@@ -134,6 +134,70 @@ func (_u *APIKeyUpdate) SetNillableStatus(v *string) *APIKeyUpdate {
 	return _u
 }
 
+// SetSource sets the "source" field.
+func (_u *APIKeyUpdate) SetSource(v string) *APIKeyUpdate {
+	_u.mutation.SetSource(v)
+	return _u
+}
+
+// SetNillableSource sets the "source" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableSource(v *string) *APIKeyUpdate {
+	if v != nil {
+		_u.SetSource(*v)
+	}
+	return _u
+}
+
+// SetSourceID sets the "source_id" field.
+func (_u *APIKeyUpdate) SetSourceID(v string) *APIKeyUpdate {
+	_u.mutation.SetSourceID(v)
+	return _u
+}
+
+// SetNillableSourceID sets the "source_id" field if the given value is not nil.
+func (_u *APIKeyUpdate) SetNillableSourceID(v *string) *APIKeyUpdate {
+	if v != nil {
+		_u.SetSourceID(*v)
+	}
+	return _u
+}
+
+// SetTags sets the "tags" field.
+func (_u *APIKeyUpdate) SetTags(v []string) *APIKeyUpdate {
+	_u.mutation.SetTags(v)
+	return _u
+}
+
+// AppendTags appends value to the "tags" field.
+func (_u *APIKeyUpdate) AppendTags(v []string) *APIKeyUpdate {
+	_u.mutation.AppendTags(v)
+	return _u
+}
+
+// ClearTags clears the value of the "tags" field.
+func (_u *APIKeyUpdate) ClearTags() *APIKeyUpdate {
+	_u.mutation.ClearTags()
+	return _u
+}
+
+// SetPermissions sets the "permissions" field.
+func (_u *APIKeyUpdate) SetPermissions(v []string) *APIKeyUpdate {
+	_u.mutation.SetPermissions(v)
+	return _u
+}
+
+// AppendPermissions appends value to the "permissions" field.
+func (_u *APIKeyUpdate) AppendPermissions(v []string) *APIKeyUpdate {
+	_u.mutation.AppendPermissions(v)
+	return _u
+}
+
+// ClearPermissions clears the value of the "permissions" field.
+func (_u *APIKeyUpdate) ClearPermissions() *APIKeyUpdate {
+	_u.mutation.ClearPermissions()
+	return _u
+}
+
 // SetLastUsedAt sets the "last_used_at" field.
 func (_u *APIKeyUpdate) SetLastUsedAt(v time.Time) *APIKeyUpdate {
 	_u.mutation.SetLastUsedAt(v)
@@ -560,6 +624,16 @@ func (_u *APIKeyUpdate) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Source(); ok {
+		if err := apikey.SourceValidator(v); err != nil {
+			return &ValidationError{Name: "source", err: fmt.Errorf(`ent: validator failed for field "APIKey.source": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SourceID(); ok {
+		if err := apikey.SourceIDValidator(v); err != nil {
+			return &ValidationError{Name: "source_id", err: fmt.Errorf(`ent: validator failed for field "APIKey.source_id": %w`, err)}
+		}
+	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "APIKey.user"`)
 	}
@@ -595,6 +669,34 @@ func (_u *APIKeyUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(apikey.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Source(); ok {
+		_spec.SetField(apikey.FieldSource, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SourceID(); ok {
+		_spec.SetField(apikey.FieldSourceID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Tags(); ok {
+		_spec.SetField(apikey.FieldTags, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedTags(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, apikey.FieldTags, value)
+		})
+	}
+	if _u.mutation.TagsCleared() {
+		_spec.ClearField(apikey.FieldTags, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.Permissions(); ok {
+		_spec.SetField(apikey.FieldPermissions, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedPermissions(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, apikey.FieldPermissions, value)
+		})
+	}
+	if _u.mutation.PermissionsCleared() {
+		_spec.ClearField(apikey.FieldPermissions, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.LastUsedAt(); ok {
 		_spec.SetField(apikey.FieldLastUsedAt, field.TypeTime, value)
@@ -918,6 +1020,70 @@ func (_u *APIKeyUpdateOne) SetNillableStatus(v *string) *APIKeyUpdateOne {
 	if v != nil {
 		_u.SetStatus(*v)
 	}
+	return _u
+}
+
+// SetSource sets the "source" field.
+func (_u *APIKeyUpdateOne) SetSource(v string) *APIKeyUpdateOne {
+	_u.mutation.SetSource(v)
+	return _u
+}
+
+// SetNillableSource sets the "source" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableSource(v *string) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetSource(*v)
+	}
+	return _u
+}
+
+// SetSourceID sets the "source_id" field.
+func (_u *APIKeyUpdateOne) SetSourceID(v string) *APIKeyUpdateOne {
+	_u.mutation.SetSourceID(v)
+	return _u
+}
+
+// SetNillableSourceID sets the "source_id" field if the given value is not nil.
+func (_u *APIKeyUpdateOne) SetNillableSourceID(v *string) *APIKeyUpdateOne {
+	if v != nil {
+		_u.SetSourceID(*v)
+	}
+	return _u
+}
+
+// SetTags sets the "tags" field.
+func (_u *APIKeyUpdateOne) SetTags(v []string) *APIKeyUpdateOne {
+	_u.mutation.SetTags(v)
+	return _u
+}
+
+// AppendTags appends value to the "tags" field.
+func (_u *APIKeyUpdateOne) AppendTags(v []string) *APIKeyUpdateOne {
+	_u.mutation.AppendTags(v)
+	return _u
+}
+
+// ClearTags clears the value of the "tags" field.
+func (_u *APIKeyUpdateOne) ClearTags() *APIKeyUpdateOne {
+	_u.mutation.ClearTags()
+	return _u
+}
+
+// SetPermissions sets the "permissions" field.
+func (_u *APIKeyUpdateOne) SetPermissions(v []string) *APIKeyUpdateOne {
+	_u.mutation.SetPermissions(v)
+	return _u
+}
+
+// AppendPermissions appends value to the "permissions" field.
+func (_u *APIKeyUpdateOne) AppendPermissions(v []string) *APIKeyUpdateOne {
+	_u.mutation.AppendPermissions(v)
+	return _u
+}
+
+// ClearPermissions clears the value of the "permissions" field.
+func (_u *APIKeyUpdateOne) ClearPermissions() *APIKeyUpdateOne {
+	_u.mutation.ClearPermissions()
 	return _u
 }
 
@@ -1360,6 +1526,16 @@ func (_u *APIKeyUpdateOne) check() error {
 			return &ValidationError{Name: "status", err: fmt.Errorf(`ent: validator failed for field "APIKey.status": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Source(); ok {
+		if err := apikey.SourceValidator(v); err != nil {
+			return &ValidationError{Name: "source", err: fmt.Errorf(`ent: validator failed for field "APIKey.source": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SourceID(); ok {
+		if err := apikey.SourceIDValidator(v); err != nil {
+			return &ValidationError{Name: "source_id", err: fmt.Errorf(`ent: validator failed for field "APIKey.source_id": %w`, err)}
+		}
+	}
 	if _u.mutation.UserCleared() && len(_u.mutation.UserIDs()) > 0 {
 		return errors.New(`ent: clearing a required unique edge "APIKey.user"`)
 	}
@@ -1412,6 +1588,34 @@ func (_u *APIKeyUpdateOne) sqlSave(ctx context.Context) (_node *APIKey, err erro
 	}
 	if value, ok := _u.mutation.Status(); ok {
 		_spec.SetField(apikey.FieldStatus, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Source(); ok {
+		_spec.SetField(apikey.FieldSource, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SourceID(); ok {
+		_spec.SetField(apikey.FieldSourceID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Tags(); ok {
+		_spec.SetField(apikey.FieldTags, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedTags(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, apikey.FieldTags, value)
+		})
+	}
+	if _u.mutation.TagsCleared() {
+		_spec.ClearField(apikey.FieldTags, field.TypeJSON)
+	}
+	if value, ok := _u.mutation.Permissions(); ok {
+		_spec.SetField(apikey.FieldPermissions, field.TypeJSON, value)
+	}
+	if value, ok := _u.mutation.AppendedPermissions(); ok {
+		_spec.AddModifier(func(u *sql.UpdateBuilder) {
+			sqljson.Append(u, apikey.FieldPermissions, value)
+		})
+	}
+	if _u.mutation.PermissionsCleared() {
+		_spec.ClearField(apikey.FieldPermissions, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.LastUsedAt(); ok {
 		_spec.SetField(apikey.FieldLastUsedAt, field.TypeTime, value)

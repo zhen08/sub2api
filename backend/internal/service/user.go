@@ -11,6 +11,9 @@ type User struct {
 	Email          string
 	Username       string
 	Notes          string
+	Source         string
+	SourceID       string
+	SourceMetadata map[string]any
 	AvatarURL      string
 	AvatarSource   string
 	AvatarMIME     string

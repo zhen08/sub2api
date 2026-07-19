@@ -100,6 +100,10 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 			AbortWithError(c, 401, "USER_INACTIVE", "User account is not active")
 			return
 		}
+		if permission := gatewayPermission(c); permission != "" && !apiKey.AllowsPlatform(permission) {
+			AbortWithError(c, 403, "PLATFORM_NOT_ALLOWED", "API key is not allowed to use this platform")
+			return
+		}
 		if abortIfAPIKeyGroupUnavailable(c, apiKey) {
 			return
 		}
@@ -227,6 +231,35 @@ func apiKeyAuthWithSubscription(apiKeyService *service.APIKeyService, subscripti
 		}
 
 		c.Next()
+	}
+}
+
+func gatewayPermission(c *gin.Context) string {
+	if platform, ok := GetForcePlatformFromContext(c); ok {
+		switch strings.ToLower(strings.TrimSpace(platform)) {
+		case service.PlatformAnthropic:
+			return service.YunMoStarPermissionClaude
+		case service.PlatformOpenAI, service.PlatformGemini, service.PlatformAntigravity:
+			return strings.ToLower(strings.TrimSpace(platform))
+		}
+	}
+	return gatewayPermissionForPath(c.Request.URL.Path)
+}
+
+func gatewayPermissionForPath(path string) string {
+	path = strings.ToLower(strings.TrimSpace(path))
+	switch {
+	case strings.HasPrefix(path, "/gemini/"), strings.HasPrefix(path, "/v1beta/"):
+		return service.PlatformGemini
+	case strings.HasPrefix(path, "/openai/"),
+		path == "/v1/responses", path == "/v1/chat/completions", path == "/v1/models",
+		strings.HasPrefix(path, "/v1/images"):
+		return service.PlatformOpenAI
+	case strings.HasPrefix(path, "/claude/v1/"),
+		path == "/v1/messages", path == "/api/v1/messages", path == "/v1/messages/count_tokens", path == "/api/v1/messages/count_tokens":
+		return service.YunMoStarPermissionClaude
+	default:
+		return ""
 	}
 }
 

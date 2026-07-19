@@ -46,6 +46,8 @@ func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) erro
 		SetKey(key.Key).
 		SetName(key.Name).
 		SetStatus(key.Status).
+		SetSource(key.Source).
+		SetSourceID(key.SourceID).
 		SetNillableGroupID(key.GroupID).
 		SetNillableLastUsedAt(key.LastUsedAt).
 		SetQuota(key.Quota).
@@ -54,6 +56,12 @@ func (r *apiKeyRepository) Create(ctx context.Context, key *service.APIKey) erro
 		SetRateLimit5h(key.RateLimit5h).
 		SetRateLimit1d(key.RateLimit1d).
 		SetRateLimit7d(key.RateLimit7d)
+	if key.Tags != nil {
+		builder.SetTags(key.Tags)
+	}
+	if key.Permissions != nil {
+		builder.SetPermissions(key.Permissions)
+	}
 
 	if len(key.IPWhitelist) > 0 {
 		builder.SetIPWhitelist(key.IPWhitelist)
@@ -134,6 +142,10 @@ func (r *apiKeyRepository) GetByKeyForAuth(ctx context.Context, key string) (*se
 			apikey.FieldGroupID,
 			apikey.FieldName,
 			apikey.FieldStatus,
+			apikey.FieldSource,
+			apikey.FieldSourceID,
+			apikey.FieldTags,
+			apikey.FieldPermissions,
 			apikey.FieldIPWhitelist,
 			apikey.FieldIPBlacklist,
 			apikey.FieldQuota,
@@ -231,6 +243,8 @@ func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey) erro
 		Where(apikey.IDEQ(key.ID), apikey.DeletedAtIsNil()).
 		SetName(key.Name).
 		SetStatus(key.Status).
+		SetSource(key.Source).
+		SetSourceID(key.SourceID).
 		SetQuota(key.Quota).
 		SetQuotaUsed(key.QuotaUsed).
 		SetRateLimit5h(key.RateLimit5h).
@@ -240,6 +254,12 @@ func (r *apiKeyRepository) Update(ctx context.Context, key *service.APIKey) erro
 		SetUsage1d(key.Usage1d).
 		SetUsage7d(key.Usage7d).
 		SetUpdatedAt(now)
+	if key.Tags != nil {
+		builder.SetTags(key.Tags)
+	}
+	if key.Permissions != nil {
+		builder.SetPermissions(key.Permissions)
+	}
 	if key.GroupID != nil {
 		builder.SetGroupID(*key.GroupID)
 	} else {
@@ -842,6 +862,10 @@ func apiKeyEntityToService(m *dbent.APIKey) *service.APIKey {
 		Key:           m.Key,
 		Name:          m.Name,
 		Status:        m.Status,
+		Source:        m.Source,
+		SourceID:      m.SourceID,
+		Tags:          m.Tags,
+		Permissions:   m.Permissions,
 		IPWhitelist:   m.IPWhitelist,
 		IPBlacklist:   m.IPBlacklist,
 		LastUsedAt:    m.LastUsedAt,
@@ -887,6 +911,9 @@ func userEntityToService(u *dbent.User) *service.User {
 		Email:                      u.Email,
 		Username:                   u.Username,
 		Notes:                      u.Notes,
+		Source:                     u.Source,
+		SourceID:                   u.SourceID,
+		SourceMetadata:             u.SourceMetadata,
 		PasswordHash:               u.PasswordHash,
 		Role:                       u.Role,
 		Balance:                    u.Balance,

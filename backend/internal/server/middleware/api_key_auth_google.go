@@ -79,6 +79,10 @@ func APIKeyAuthWithSubscriptionGoogle(apiKeyService *service.APIKeyService, subs
 			abortWithGoogleError(c, 401, "User account is not active")
 			return
 		}
+		if permission := gatewayPermission(c); permission != "" && !apiKey.AllowsPlatform(permission) {
+			abortWithGoogleError(c, 403, "API key is not allowed to use this platform")
+			return
+		}
 		if _, message, ok := validateAPIKeyGroupAvailable(apiKey); !ok {
 			service.MarkOpsClientBusinessLimited(c, service.OpsClientBusinessLimitedReasonAPIKeyGroupUnavailable)
 			abortWithGoogleError(c, 403, message)

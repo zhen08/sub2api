@@ -66,6 +66,17 @@ func (User) Fields() []ent.Field {
 		field.String("notes").
 			SchemaType(map[string]string{dialect.Postgres: "text"}).
 			Default(""),
+		field.String("source").
+			MaxLen(50).
+			Default("").
+			Comment("External system managing this user, e.g. yunmostar"),
+		field.String("source_id").
+			MaxLen(255).
+			Default("").
+			Comment("Stable user identifier in the external source"),
+		field.JSON("source_metadata", map[string]any{}).
+			Optional().
+			Comment("Non-secret profile metadata supplied by the external source"),
 
 		// TOTP 双因素认证字段
 		field.String("totp_secret_encrypted").
@@ -143,5 +154,6 @@ func (User) Indexes() []ent.Index {
 		// email 字段已在 Fields() 中声明 Unique()，无需重复索引
 		index.Fields("status"),
 		index.Fields("deleted_at"),
+		index.Fields("source", "source_id"),
 	}
 }

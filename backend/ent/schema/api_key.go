@@ -47,6 +47,20 @@ func (APIKey) Fields() []ent.Field {
 		field.String("status").
 			MaxLen(20).
 			Default(domain.StatusActive),
+		field.String("source").
+			MaxLen(50).
+			Default("").
+			Comment("External system managing this key, e.g. yunmostar"),
+		field.String("source_id").
+			MaxLen(255).
+			Default("").
+			Comment("Stable key identifier in the external source"),
+		field.JSON("tags", []string{}).
+			Optional().
+			Comment("External searchable tags"),
+		field.JSON("permissions", []string{}).
+			Optional().
+			Comment("Allowed gateway platforms; empty preserves legacy unrestricted behavior"),
 		field.Time("last_used_at").
 			Optional().
 			Nillable().
@@ -141,6 +155,7 @@ func (APIKey) Indexes() []ent.Index {
 		index.Fields("status"),
 		index.Fields("deleted_at"),
 		index.Fields("last_used_at"),
+		index.Fields("source", "source_id"),
 		// Index for quota queries
 		index.Fields("quota", "quota_used"),
 		index.Fields("expires_at"),

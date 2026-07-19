@@ -84,10 +84,12 @@ func (r *userRepository) Create(ctx context.Context, userIn *service.User) error
 		return err
 	}
 
-	created, err := txClient.User.Create().
+	createOp := txClient.User.Create().
 		SetEmail(userIn.Email).
 		SetUsername(userIn.Username).
 		SetNotes(userIn.Notes).
+		SetSource(userIn.Source).
+		SetSourceID(userIn.SourceID).
 		SetPasswordHash(userIn.PasswordHash).
 		SetRole(userIn.Role).
 		SetBalance(userIn.Balance).
@@ -96,8 +98,11 @@ func (r *userRepository) Create(ctx context.Context, userIn *service.User) error
 		SetSignupSource(userSignupSourceOrDefault(userIn.SignupSource)).
 		SetNillableLastLoginAt(userIn.LastLoginAt).
 		SetNillableLastActiveAt(userIn.LastActiveAt).
-		SetRpmLimit(userIn.RPMLimit).
-		Save(txCtx)
+		SetRpmLimit(userIn.RPMLimit)
+	if userIn.SourceMetadata != nil {
+		createOp.SetSourceMetadata(userIn.SourceMetadata)
+	}
+	created, err := createOp.Save(txCtx)
 	if err != nil {
 		return translatePersistenceError(err, nil, service.ErrEmailExists)
 	}
@@ -231,6 +236,8 @@ func (r *userRepository) Update(ctx context.Context, userIn *service.User) error
 		SetEmail(userIn.Email).
 		SetUsername(userIn.Username).
 		SetNotes(userIn.Notes).
+		SetSource(userIn.Source).
+		SetSourceID(userIn.SourceID).
 		SetPasswordHash(userIn.PasswordHash).
 		SetRole(userIn.Role).
 		SetBalance(userIn.Balance).
@@ -242,6 +249,9 @@ func (r *userRepository) Update(ctx context.Context, userIn *service.User) error
 		SetBalanceNotifyExtraEmails(marshalExtraEmails(userIn.BalanceNotifyExtraEmails)).
 		SetTotalRecharged(userIn.TotalRecharged).
 		SetRpmLimit(userIn.RPMLimit)
+	if userIn.SourceMetadata != nil {
+		updateOp.SetSourceMetadata(userIn.SourceMetadata)
+	}
 	if userIn.SignupSource != "" {
 		updateOp = updateOp.SetSignupSource(userIn.SignupSource)
 	}

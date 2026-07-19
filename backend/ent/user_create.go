@@ -186,6 +186,40 @@ func (_c *UserCreate) SetNillableNotes(v *string) *UserCreate {
 	return _c
 }
 
+// SetSource sets the "source" field.
+func (_c *UserCreate) SetSource(v string) *UserCreate {
+	_c.mutation.SetSource(v)
+	return _c
+}
+
+// SetNillableSource sets the "source" field if the given value is not nil.
+func (_c *UserCreate) SetNillableSource(v *string) *UserCreate {
+	if v != nil {
+		_c.SetSource(*v)
+	}
+	return _c
+}
+
+// SetSourceID sets the "source_id" field.
+func (_c *UserCreate) SetSourceID(v string) *UserCreate {
+	_c.mutation.SetSourceID(v)
+	return _c
+}
+
+// SetNillableSourceID sets the "source_id" field if the given value is not nil.
+func (_c *UserCreate) SetNillableSourceID(v *string) *UserCreate {
+	if v != nil {
+		_c.SetSourceID(*v)
+	}
+	return _c
+}
+
+// SetSourceMetadata sets the "source_metadata" field.
+func (_c *UserCreate) SetSourceMetadata(v map[string]interface{}) *UserCreate {
+	_c.mutation.SetSourceMetadata(v)
+	return _c
+}
+
 // SetTotpSecretEncrypted sets the "totp_secret_encrypted" field.
 func (_c *UserCreate) SetTotpSecretEncrypted(v string) *UserCreate {
 	_c.mutation.SetTotpSecretEncrypted(v)
@@ -628,6 +662,14 @@ func (_c *UserCreate) defaults() error {
 		v := user.DefaultNotes
 		_c.mutation.SetNotes(v)
 	}
+	if _, ok := _c.mutation.Source(); !ok {
+		v := user.DefaultSource
+		_c.mutation.SetSource(v)
+	}
+	if _, ok := _c.mutation.SourceID(); !ok {
+		v := user.DefaultSourceID
+		_c.mutation.SetSourceID(v)
+	}
 	if _, ok := _c.mutation.TotpEnabled(); !ok {
 		v := user.DefaultTotpEnabled
 		_c.mutation.SetTotpEnabled(v)
@@ -718,6 +760,22 @@ func (_c *UserCreate) check() error {
 	}
 	if _, ok := _c.mutation.Notes(); !ok {
 		return &ValidationError{Name: "notes", err: errors.New(`ent: missing required field "User.notes"`)}
+	}
+	if _, ok := _c.mutation.Source(); !ok {
+		return &ValidationError{Name: "source", err: errors.New(`ent: missing required field "User.source"`)}
+	}
+	if v, ok := _c.mutation.Source(); ok {
+		if err := user.SourceValidator(v); err != nil {
+			return &ValidationError{Name: "source", err: fmt.Errorf(`ent: validator failed for field "User.source": %w`, err)}
+		}
+	}
+	if _, ok := _c.mutation.SourceID(); !ok {
+		return &ValidationError{Name: "source_id", err: errors.New(`ent: missing required field "User.source_id"`)}
+	}
+	if v, ok := _c.mutation.SourceID(); ok {
+		if err := user.SourceIDValidator(v); err != nil {
+			return &ValidationError{Name: "source_id", err: fmt.Errorf(`ent: validator failed for field "User.source_id": %w`, err)}
+		}
 	}
 	if _, ok := _c.mutation.TotpEnabled(); !ok {
 		return &ValidationError{Name: "totp_enabled", err: errors.New(`ent: missing required field "User.totp_enabled"`)}
@@ -819,6 +877,18 @@ func (_c *UserCreate) createSpec() (*User, *sqlgraph.CreateSpec) {
 	if value, ok := _c.mutation.Notes(); ok {
 		_spec.SetField(user.FieldNotes, field.TypeString, value)
 		_node.Notes = value
+	}
+	if value, ok := _c.mutation.Source(); ok {
+		_spec.SetField(user.FieldSource, field.TypeString, value)
+		_node.Source = value
+	}
+	if value, ok := _c.mutation.SourceID(); ok {
+		_spec.SetField(user.FieldSourceID, field.TypeString, value)
+		_node.SourceID = value
+	}
+	if value, ok := _c.mutation.SourceMetadata(); ok {
+		_spec.SetField(user.FieldSourceMetadata, field.TypeJSON, value)
+		_node.SourceMetadata = value
 	}
 	if value, ok := _c.mutation.TotpSecretEncrypted(); ok {
 		_spec.SetField(user.FieldTotpSecretEncrypted, field.TypeString, value)
@@ -1288,6 +1358,48 @@ func (u *UserUpsert) UpdateNotes() *UserUpsert {
 	return u
 }
 
+// SetSource sets the "source" field.
+func (u *UserUpsert) SetSource(v string) *UserUpsert {
+	u.Set(user.FieldSource, v)
+	return u
+}
+
+// UpdateSource sets the "source" field to the value that was provided on create.
+func (u *UserUpsert) UpdateSource() *UserUpsert {
+	u.SetExcluded(user.FieldSource)
+	return u
+}
+
+// SetSourceID sets the "source_id" field.
+func (u *UserUpsert) SetSourceID(v string) *UserUpsert {
+	u.Set(user.FieldSourceID, v)
+	return u
+}
+
+// UpdateSourceID sets the "source_id" field to the value that was provided on create.
+func (u *UserUpsert) UpdateSourceID() *UserUpsert {
+	u.SetExcluded(user.FieldSourceID)
+	return u
+}
+
+// SetSourceMetadata sets the "source_metadata" field.
+func (u *UserUpsert) SetSourceMetadata(v map[string]interface{}) *UserUpsert {
+	u.Set(user.FieldSourceMetadata, v)
+	return u
+}
+
+// UpdateSourceMetadata sets the "source_metadata" field to the value that was provided on create.
+func (u *UserUpsert) UpdateSourceMetadata() *UserUpsert {
+	u.SetExcluded(user.FieldSourceMetadata)
+	return u
+}
+
+// ClearSourceMetadata clears the value of the "source_metadata" field.
+func (u *UserUpsert) ClearSourceMetadata() *UserUpsert {
+	u.SetNull(user.FieldSourceMetadata)
+	return u
+}
+
 // SetTotpSecretEncrypted sets the "totp_secret_encrypted" field.
 func (u *UserUpsert) SetTotpSecretEncrypted(v string) *UserUpsert {
 	u.Set(user.FieldTotpSecretEncrypted, v)
@@ -1704,6 +1816,55 @@ func (u *UserUpsertOne) SetNotes(v string) *UserUpsertOne {
 func (u *UserUpsertOne) UpdateNotes() *UserUpsertOne {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateNotes()
+	})
+}
+
+// SetSource sets the "source" field.
+func (u *UserUpsertOne) SetSource(v string) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetSource(v)
+	})
+}
+
+// UpdateSource sets the "source" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateSource() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateSource()
+	})
+}
+
+// SetSourceID sets the "source_id" field.
+func (u *UserUpsertOne) SetSourceID(v string) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetSourceID(v)
+	})
+}
+
+// UpdateSourceID sets the "source_id" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateSourceID() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateSourceID()
+	})
+}
+
+// SetSourceMetadata sets the "source_metadata" field.
+func (u *UserUpsertOne) SetSourceMetadata(v map[string]interface{}) *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.SetSourceMetadata(v)
+	})
+}
+
+// UpdateSourceMetadata sets the "source_metadata" field to the value that was provided on create.
+func (u *UserUpsertOne) UpdateSourceMetadata() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateSourceMetadata()
+	})
+}
+
+// ClearSourceMetadata clears the value of the "source_metadata" field.
+func (u *UserUpsertOne) ClearSourceMetadata() *UserUpsertOne {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearSourceMetadata()
 	})
 }
 
@@ -2321,6 +2482,55 @@ func (u *UserUpsertBulk) SetNotes(v string) *UserUpsertBulk {
 func (u *UserUpsertBulk) UpdateNotes() *UserUpsertBulk {
 	return u.Update(func(s *UserUpsert) {
 		s.UpdateNotes()
+	})
+}
+
+// SetSource sets the "source" field.
+func (u *UserUpsertBulk) SetSource(v string) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetSource(v)
+	})
+}
+
+// UpdateSource sets the "source" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateSource() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateSource()
+	})
+}
+
+// SetSourceID sets the "source_id" field.
+func (u *UserUpsertBulk) SetSourceID(v string) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetSourceID(v)
+	})
+}
+
+// UpdateSourceID sets the "source_id" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateSourceID() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateSourceID()
+	})
+}
+
+// SetSourceMetadata sets the "source_metadata" field.
+func (u *UserUpsertBulk) SetSourceMetadata(v map[string]interface{}) *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.SetSourceMetadata(v)
+	})
+}
+
+// UpdateSourceMetadata sets the "source_metadata" field to the value that was provided on create.
+func (u *UserUpsertBulk) UpdateSourceMetadata() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.UpdateSourceMetadata()
+	})
+}
+
+// ClearSourceMetadata clears the value of the "source_metadata" field.
+func (u *UserUpsertBulk) ClearSourceMetadata() *UserUpsertBulk {
+	return u.Update(func(s *UserUpsert) {
+		s.ClearSourceMetadata()
 	})
 }
 

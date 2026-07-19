@@ -14,7 +14,7 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-const apiKeyAuthSnapshotVersion = 15 // v15: include group web search per-call pricing
+const apiKeyAuthSnapshotVersion = 16 // v16: include per-key platform permissions
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -212,6 +212,7 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 		GroupID:     apiKey.GroupID,
 		Name:        apiKey.Name,
 		Status:      apiKey.Status,
+		Permissions: apiKey.Permissions,
 		IPWhitelist: apiKey.IPWhitelist,
 		IPBlacklist: apiKey.IPBlacklist,
 		Quota:       apiKey.Quota,
@@ -303,6 +304,7 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 		Key:         key,
 		Name:        snapshot.Name,
 		Status:      snapshot.Status,
+		Permissions: snapshot.Permissions,
 		IPWhitelist: snapshot.IPWhitelist,
 		IPBlacklist: snapshot.IPBlacklist,
 		Quota:       snapshot.Quota,

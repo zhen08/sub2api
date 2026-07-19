@@ -228,6 +228,10 @@ func RegisterGatewayRoutes(
 	gemini.Use(clientRequestID)
 	gemini.Use(opsErrorLogger)
 	gemini.Use(endpointNorm)
+	// The native Gemini endpoint is unambiguous. Force its platform so a
+	// YunMoProject multi-protocol key can share one billing/routing group with
+	// Codex while still selecting only Gemini accounts.
+	gemini.Use(middleware.ForcePlatform(service.PlatformGemini))
 	gemini.Use(middleware.APIKeyAuthWithSubscriptionGoogle(apiKeyService, subscriptionService, cfg))
 	gemini.Use(callAuditHandler)
 	gemini.Use(requireGroupGoogle)
@@ -333,7 +337,9 @@ func RegisterGatewayRoutes(
 	// GET /api/v1/usage is registered once by RegisterUserRoutes and dispatches
 	// JWT management clients versus legacy API-key clients by credential shape.
 
-	legacyClaude := newLegacyGroup("/claude/v1", "")
+	// Keep an explicit Claude route available for the same multi-protocol key
+	// when Claude accounts are added later.
+	legacyClaude := newLegacyGroup("/claude/v1", service.PlatformAnthropic)
 	legacyClaude.POST("/messages", messagesHandler)
 	legacyClaude.POST("/messages/count_tokens", countTokensHandler)
 	legacyClaude.POST("/completions", completionsHandler)

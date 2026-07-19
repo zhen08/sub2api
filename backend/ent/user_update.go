@@ -213,6 +213,46 @@ func (_u *UserUpdate) SetNillableNotes(v *string) *UserUpdate {
 	return _u
 }
 
+// SetSource sets the "source" field.
+func (_u *UserUpdate) SetSource(v string) *UserUpdate {
+	_u.mutation.SetSource(v)
+	return _u
+}
+
+// SetNillableSource sets the "source" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableSource(v *string) *UserUpdate {
+	if v != nil {
+		_u.SetSource(*v)
+	}
+	return _u
+}
+
+// SetSourceID sets the "source_id" field.
+func (_u *UserUpdate) SetSourceID(v string) *UserUpdate {
+	_u.mutation.SetSourceID(v)
+	return _u
+}
+
+// SetNillableSourceID sets the "source_id" field if the given value is not nil.
+func (_u *UserUpdate) SetNillableSourceID(v *string) *UserUpdate {
+	if v != nil {
+		_u.SetSourceID(*v)
+	}
+	return _u
+}
+
+// SetSourceMetadata sets the "source_metadata" field.
+func (_u *UserUpdate) SetSourceMetadata(v map[string]interface{}) *UserUpdate {
+	_u.mutation.SetSourceMetadata(v)
+	return _u
+}
+
+// ClearSourceMetadata clears the value of the "source_metadata" field.
+func (_u *UserUpdate) ClearSourceMetadata() *UserUpdate {
+	_u.mutation.ClearSourceMetadata()
+	return _u
+}
+
 // SetTotpSecretEncrypted sets the "totp_secret_encrypted" field.
 func (_u *UserUpdate) SetTotpSecretEncrypted(v string) *UserUpdate {
 	_u.mutation.SetTotpSecretEncrypted(v)
@@ -974,6 +1014,16 @@ func (_u *UserUpdate) check() error {
 			return &ValidationError{Name: "username", err: fmt.Errorf(`ent: validator failed for field "User.username": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Source(); ok {
+		if err := user.SourceValidator(v); err != nil {
+			return &ValidationError{Name: "source", err: fmt.Errorf(`ent: validator failed for field "User.source": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SourceID(); ok {
+		if err := user.SourceIDValidator(v); err != nil {
+			return &ValidationError{Name: "source_id", err: fmt.Errorf(`ent: validator failed for field "User.source_id": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.SignupSource(); ok {
 		if err := user.SignupSourceValidator(v); err != nil {
 			return &ValidationError{Name: "signup_source", err: fmt.Errorf(`ent: validator failed for field "User.signup_source": %w`, err)}
@@ -1038,6 +1088,18 @@ func (_u *UserUpdate) sqlSave(ctx context.Context) (_node int, err error) {
 	}
 	if value, ok := _u.mutation.Notes(); ok {
 		_spec.SetField(user.FieldNotes, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Source(); ok {
+		_spec.SetField(user.FieldSource, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SourceID(); ok {
+		_spec.SetField(user.FieldSourceID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SourceMetadata(); ok {
+		_spec.SetField(user.FieldSourceMetadata, field.TypeJSON, value)
+	}
+	if _u.mutation.SourceMetadataCleared() {
+		_spec.ClearField(user.FieldSourceMetadata, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.TotpSecretEncrypted(); ok {
 		_spec.SetField(user.FieldTotpSecretEncrypted, field.TypeString, value)
@@ -1889,6 +1951,46 @@ func (_u *UserUpdateOne) SetNillableNotes(v *string) *UserUpdateOne {
 	return _u
 }
 
+// SetSource sets the "source" field.
+func (_u *UserUpdateOne) SetSource(v string) *UserUpdateOne {
+	_u.mutation.SetSource(v)
+	return _u
+}
+
+// SetNillableSource sets the "source" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableSource(v *string) *UserUpdateOne {
+	if v != nil {
+		_u.SetSource(*v)
+	}
+	return _u
+}
+
+// SetSourceID sets the "source_id" field.
+func (_u *UserUpdateOne) SetSourceID(v string) *UserUpdateOne {
+	_u.mutation.SetSourceID(v)
+	return _u
+}
+
+// SetNillableSourceID sets the "source_id" field if the given value is not nil.
+func (_u *UserUpdateOne) SetNillableSourceID(v *string) *UserUpdateOne {
+	if v != nil {
+		_u.SetSourceID(*v)
+	}
+	return _u
+}
+
+// SetSourceMetadata sets the "source_metadata" field.
+func (_u *UserUpdateOne) SetSourceMetadata(v map[string]interface{}) *UserUpdateOne {
+	_u.mutation.SetSourceMetadata(v)
+	return _u
+}
+
+// ClearSourceMetadata clears the value of the "source_metadata" field.
+func (_u *UserUpdateOne) ClearSourceMetadata() *UserUpdateOne {
+	_u.mutation.ClearSourceMetadata()
+	return _u
+}
+
 // SetTotpSecretEncrypted sets the "totp_secret_encrypted" field.
 func (_u *UserUpdateOne) SetTotpSecretEncrypted(v string) *UserUpdateOne {
 	_u.mutation.SetTotpSecretEncrypted(v)
@@ -2663,6 +2765,16 @@ func (_u *UserUpdateOne) check() error {
 			return &ValidationError{Name: "username", err: fmt.Errorf(`ent: validator failed for field "User.username": %w`, err)}
 		}
 	}
+	if v, ok := _u.mutation.Source(); ok {
+		if err := user.SourceValidator(v); err != nil {
+			return &ValidationError{Name: "source", err: fmt.Errorf(`ent: validator failed for field "User.source": %w`, err)}
+		}
+	}
+	if v, ok := _u.mutation.SourceID(); ok {
+		if err := user.SourceIDValidator(v); err != nil {
+			return &ValidationError{Name: "source_id", err: fmt.Errorf(`ent: validator failed for field "User.source_id": %w`, err)}
+		}
+	}
 	if v, ok := _u.mutation.SignupSource(); ok {
 		if err := user.SignupSourceValidator(v); err != nil {
 			return &ValidationError{Name: "signup_source", err: fmt.Errorf(`ent: validator failed for field "User.signup_source": %w`, err)}
@@ -2744,6 +2856,18 @@ func (_u *UserUpdateOne) sqlSave(ctx context.Context) (_node *User, err error) {
 	}
 	if value, ok := _u.mutation.Notes(); ok {
 		_spec.SetField(user.FieldNotes, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.Source(); ok {
+		_spec.SetField(user.FieldSource, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SourceID(); ok {
+		_spec.SetField(user.FieldSourceID, field.TypeString, value)
+	}
+	if value, ok := _u.mutation.SourceMetadata(); ok {
+		_spec.SetField(user.FieldSourceMetadata, field.TypeJSON, value)
+	}
+	if _u.mutation.SourceMetadataCleared() {
+		_spec.ClearField(user.FieldSourceMetadata, field.TypeJSON)
 	}
 	if value, ok := _u.mutation.TotpSecretEncrypted(); ok {
 		_spec.SetField(user.FieldTotpSecretEncrypted, field.TypeString, value)

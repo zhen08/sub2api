@@ -1,5 +1,7 @@
 docs/claude-relay-service/
 .codex
+.pnpm-store/
+.worktrees/
 
 # ===================
 # Go 后端

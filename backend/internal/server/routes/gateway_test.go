@@ -198,7 +198,7 @@ func TestGatewayRoutesCRSLegacyAliasesRunCallAuditOnceAfterAPIKeyAuth(t *testing
 
 	require.Equal(t, 5, auditCalls, "each legacy request must enter call audit exactly once")
 	require.Equal(t, auditCalls, authenticatedAuditCalls, "call audit must run after API-key authentication")
-	require.Equal(t, []string{"", "", service.PlatformOpenAI, service.PlatformAntigravity, service.PlatformGemini}, forcedPlatforms)
+	require.Equal(t, []string{"", service.PlatformAnthropic, service.PlatformOpenAI, service.PlatformAntigravity, service.PlatformGemini}, forcedPlatforms)
 }
 
 func TestGatewayRoutesOpenAIAlphaSearchPathsAreRegistered(t *testing.T) {

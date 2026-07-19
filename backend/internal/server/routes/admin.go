@@ -96,6 +96,9 @@ func RegisterAdminRoutes(
 		// API Key 管理
 		registerAdminAPIKeyRoutes(admin, h)
 
+		// YunMoProject relay key lifecycle integration
+		registerYunMoStarIntegrationRoutes(admin, h)
+
 		// 定时测试计划
 		registerScheduledTestRoutes(admin, h)
 
@@ -116,6 +119,15 @@ func RegisterAdminRoutes(
 
 		// 操作审计日志
 		registerAuditLogRoutes(admin, h, stepUpAuth)
+	}
+}
+
+func registerYunMoStarIntegrationRoutes(admin *gin.RouterGroup, h *handler.Handlers) {
+	relayKeys := admin.Group("/integrations/yunmostar/relay-keys")
+	{
+		relayKeys.POST("", h.Admin.YunMoStarIntegration.CreateRelayKey)
+		relayKeys.PUT("/:sourceKeyId", h.Admin.YunMoStarIntegration.ImportRelayKey)
+		relayKeys.DELETE("/:sourceKeyId", h.Admin.YunMoStarIntegration.DeleteRelayKey)
 	}
 }
 
