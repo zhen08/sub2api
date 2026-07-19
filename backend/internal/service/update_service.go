@@ -655,6 +655,13 @@ func compareVersions(current, latest string) int {
 
 func parseVersion(v string) [3]int {
 	v = strings.TrimPrefix(v, "v")
+	// Compare only the SemVer core. Custom builds and prereleases may append
+	// identifiers such as "-yms-0719-2" or "+build.42" to the patch version.
+	// Without stripping them, strconv.Atoi treats the entire patch component as
+	// invalid and silently reduces versions such as 0.1.161-yms-0719-2 to 0.1.0.
+	if suffix := strings.IndexAny(v, "-+"); suffix >= 0 {
+		v = v[:suffix]
+	}
 	parts := strings.Split(v, ".")
 	result := [3]int{0, 0, 0}
 	for i := 0; i < len(parts) && i < 3; i++ {

@@ -69,6 +69,40 @@ func TestUpdateServicePerformUpdateNoUpdateReturnsSentinel(t *testing.T) {
 	require.ErrorIs(t, err, ErrNoUpdateAvailable)
 }
 
+func TestCompareVersionsIgnoresSemVerSuffixes(t *testing.T) {
+	tests := []struct {
+		name    string
+		current string
+		latest  string
+		want    int
+	}{
+		{
+			name:    "custom build equals upstream release",
+			current: "0.1.161-yms-0719-2",
+			latest:  "v0.1.161",
+			want:    0,
+		},
+		{
+			name:    "custom build detects newer patch",
+			current: "0.1.161-yms-0719-2",
+			latest:  "v0.1.162",
+			want:    -1,
+		},
+		{
+			name:    "build metadata does not affect comparison",
+			current: "v0.1.162+build.42",
+			latest:  "0.1.161",
+			want:    1,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			require.Equal(t, tt.want, compareVersions(tt.current, tt.latest))
+		})
+	}
+}
+
 func newRollbackTestService(current string, releases []*GitHubRelease) *UpdateService {
 	return NewUpdateService(
 		&updateServiceCacheStub{},
