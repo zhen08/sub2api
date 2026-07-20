@@ -266,7 +266,7 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	auditLogRepository := repository.NewAuditLogRepository(db)
 	auditLogService := service.ProvideAuditLogService(auditLogRepository, settingService)
 	auditLogHandler := admin.NewAuditLogHandler(auditLogService, totpService)
-	yunMoStarIntegrationService := service.NewYunMoStarIntegrationService(client, apiKeyService)
+	yunMoStarIntegrationService := service.NewYunMoStarIntegrationService(client, apiKeyService, configConfig)
 	yunMoStarIntegrationHandler := admin.NewYunMoStarIntegrationHandler(yunMoStarIntegrationService)
 	upstreamBillingProbeService := service.ProvideUpstreamBillingProbeService(accountRepository, accountTestService, settingService, leaderLockCache, db)
 	adminHandlers := handler.ProvideAdminHandlers(dashboardHandler, adminUserHandler, groupHandler, accountHandler, adminAnnouncementHandler, dataManagementHandler, backupHandler, oAuthHandler, openAIOAuthHandler, geminiOAuthHandler, antigravityOAuthHandler, grokOAuthHandler, proxyHandler, adminRedeemHandler, promoHandler, settingHandler, opsHandler, systemHandler, adminSubscriptionHandler, adminUsageHandler, userAttributeHandler, errorPassthroughHandler, tlsFingerprintProfileHandler, adminAPIKeyHandler, scheduledTestHandler, channelHandler, channelMonitorHandler, channelMonitorRequestTemplateHandler, contentModerationHandler, promptAdminHandler, paymentHandler, affiliateHandler, complianceHandler, auditLogHandler, yunMoStarIntegrationHandler, upstreamBillingProbeService)

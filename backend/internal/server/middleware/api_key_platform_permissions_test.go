@@ -40,3 +40,23 @@ func TestGatewayPermissionUsesForcedPlatform(t *testing.T) {
 	c.Set(string(ContextKeyForcePlatform), service.PlatformAntigravity)
 	require.Equal(t, service.PlatformAntigravity, gatewayPermission(c))
 }
+
+func TestSinglePlatformKeysRejectEveryCrossPlatformRouteVariant(t *testing.T) {
+	keys := map[string]*service.APIKey{
+		service.PlatformOpenAI:            {Permissions: []string{service.PlatformOpenAI}},
+		service.YunMoStarPermissionClaude: {Permissions: []string{service.YunMoStarPermissionClaude}},
+		service.PlatformGemini:            {Permissions: []string{service.PlatformGemini}},
+	}
+	paths := []string{
+		"/v1/responses", "/v1/chat/completions", "/openai/v1/responses",
+		"/v1/messages", "/api/v1/messages", "/claude/v1/messages",
+		"/v1beta/models/gemini:generateContent", "/gemini/v1beta/models/gemini:generateContent",
+	}
+	for _, path := range paths {
+		permission := gatewayPermissionForPath(path)
+		require.NotEmpty(t, permission, path)
+		for keyPlatform, key := range keys {
+			require.Equal(t, keyPlatform == permission, key.AllowsPlatform(permission), "%s with %s key", path, keyPlatform)
+		}
+	}
+}

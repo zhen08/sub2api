@@ -97,6 +97,16 @@ type Config struct {
 	Idempotency             IdempotencyConfig             `mapstructure:"idempotency"`
 	BatchImage              BatchImageConfig              `mapstructure:"batch_image"`
 	ImageStorage            ImageStorageConfig            `mapstructure:"image_storage"`
+	YunMoStarIntegration    YunMoStarIntegrationConfig    `mapstructure:"yunmostar_integration"`
+}
+
+// YunMoStarIntegrationConfig pins each YunMoStar-issued developer key to an
+// explicit Sub2API group. IDs are deployment-owned because a platform may have
+// multiple active groups and selecting the first one is unsafe.
+type YunMoStarIntegrationConfig struct {
+	CodexGroupID      int64 `mapstructure:"codex_group_id"`
+	ClaudeCodeGroupID int64 `mapstructure:"claude_code_group_id"`
+	GeminiGroupID     int64 `mapstructure:"gemini_group_id"`
 }
 
 type LogConfig struct {
@@ -2069,6 +2079,12 @@ func setDefaults() {
 
 	// Timezone (default to Asia/Shanghai for Chinese users)
 	viper.SetDefault("timezone", "Asia/Shanghai")
+
+	// Optional outside YunMoStar deployments. The integration endpoint fails
+	// closed for typed requests until all required group IDs are configured.
+	viper.SetDefault("yunmostar_integration.codex_group_id", 0)
+	viper.SetDefault("yunmostar_integration.claude_code_group_id", 0)
+	viper.SetDefault("yunmostar_integration.gemini_group_id", 0)
 
 	// API Key auth cache
 	viper.SetDefault("api_key_auth_cache.l1_size", 65535)

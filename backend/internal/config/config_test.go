@@ -35,6 +35,19 @@ func TestLoadServerTimingConfig(t *testing.T) {
 	})
 }
 
+func TestLoadYunMoStarIntegrationGroupIDs(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("YUNMOSTAR_INTEGRATION_CODEX_GROUP_ID", "6")
+	t.Setenv("YUNMOSTAR_INTEGRATION_CLAUDE_CODE_GROUP_ID", "5")
+	t.Setenv("YUNMOSTAR_INTEGRATION_GEMINI_GROUP_ID", "7")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	require.Equal(t, int64(6), cfg.YunMoStarIntegration.CodexGroupID)
+	require.Equal(t, int64(5), cfg.YunMoStarIntegration.ClaudeCodeGroupID)
+	require.Equal(t, int64(7), cfg.YunMoStarIntegration.GeminiGroupID)
+}
+
 func TestLoadHTTPIngressSafetyDefaults(t *testing.T) {
 	resetViperWithJWTSecret(t)
 	cfg, err := Load()

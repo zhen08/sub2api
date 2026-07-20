@@ -1242,6 +1242,14 @@ image_storage:
   # 当上游返回的是图片 url 时，下载该图片再转存的字节上限（默认 32MB）
   max_download_bytes: 33554432
 
+# YunMoStar per-client developer keys. Leave zero when this integration is not
+# used; typed integration requests fail closed until every referenced group is
+# configured with the matching platform.
+yunmostar_integration:
+  codex_group_id: 0
+  claude_code_group_id: 0
+  gemini_group_id: 0
+
 # =============================================================================
 # Full AI Call Audit（完整 AI 调用审计）
 # =============================================================================

@@ -13,12 +13,16 @@ import (
 	"github.com/Wei-Shaw/sub2api/ent/authidentity"
 	dbgroup "github.com/Wei-Shaw/sub2api/ent/group"
 	dbuser "github.com/Wei-Shaw/sub2api/ent/user"
+	"github.com/Wei-Shaw/sub2api/internal/config"
 	infraerrors "github.com/Wei-Shaw/sub2api/internal/pkg/errors"
 	"github.com/google/uuid"
 )
 
 const YunMoStarSource = "yunmostar"
 const YunMoStarPermissionClaude = "claude"
+const YunMoStarClientCodex = "codex"
+const YunMoStarClientClaudeCode = "claude_code"
+const YunMoStarClientGemini = "gemini"
 
 var (
 	ErrExternalIdentityConflict = infraerrors.Conflict("EXTERNAL_IDENTITY_CONFLICT", "external user or API key conflicts with an existing record")
@@ -29,6 +33,7 @@ var (
 // YunMoStarRelayKeyInput contains only non-secret profile metadata plus the
 // optional existing key used by the one-time migration endpoint.
 type YunMoStarRelayKeyInput struct {
+	ClientType     string         `json:"client_type"`
 	ExternalUserID string         `json:"external_user_id"`
 	Email          string         `json:"email"`
 	Username       string         `json:"username"`
@@ -41,26 +46,31 @@ type YunMoStarRelayKeyInput struct {
 }
 
 type YunMoStarRelayKeyResult struct {
-	SourceKeyID string   `json:"id"`
-	APIKeyID    int64    `json:"api_key_id"`
-	UserID      int64    `json:"user_id"`
-	Name        string   `json:"name"`
-	Prefix      string   `json:"prefix"`
-	Tags        []string `json:"tags"`
-	Permissions []string `json:"permissions"`
-	Key         string   `json:"api_key,omitempty"`
+	SourceKeyID   string   `json:"id"`
+	APIKeyID      int64    `json:"api_key_id"`
+	UserID        int64    `json:"user_id"`
+	ClientType    string   `json:"client_type,omitempty"`
+	GroupID       int64    `json:"group_id"`
+	GroupPlatform string   `json:"group_platform"`
+	Name          string   `json:"name"`
+	Prefix        string   `json:"prefix"`
+	Tags          []string `json:"tags"`
+	Permissions   []string `json:"permissions"`
+	Key           string   `json:"api_key,omitempty"`
 }
 
 type YunMoStarIntegrationService struct {
 	client        *dbent.Client
 	apiKeyService *APIKeyService
+	config        config.YunMoStarIntegrationConfig
 }
 
-func NewYunMoStarIntegrationService(client *dbent.Client, apiKeyService *APIKeyService) *YunMoStarIntegrationService {
-	return &YunMoStarIntegrationService{client: client, apiKeyService: apiKeyService}
+func NewYunMoStarIntegrationService(client *dbent.Client, apiKeyService *APIKeyService, cfg *config.Config) *YunMoStarIntegrationService {
+	return &YunMoStarIntegrationService{client: client, apiKeyService: apiKeyService, config: cfg.YunMoStarIntegration}
 }
 
 func normalizeYunMoStarInput(input YunMoStarRelayKeyInput) (YunMoStarRelayKeyInput, error) {
+	input.ClientType = strings.ToLower(strings.TrimSpace(input.ClientType))
 	input.ExternalUserID = strings.TrimSpace(input.ExternalUserID)
 	input.Email = strings.ToLower(strings.TrimSpace(input.Email))
 	input.Username = strings.TrimSpace(input.Username)
@@ -72,7 +82,17 @@ func normalizeYunMoStarInput(input YunMoStarRelayKeyInput) (YunMoStarRelayKeyInp
 	}
 
 	permissions := input.Permissions
-	if len(permissions) == 0 {
+	if input.ClientType != "" {
+		permission, ok := yunMoStarClientPermission(input.ClientType)
+		if !ok {
+			return input, fmt.Errorf("%w: unsupported client_type %q", ErrExternalInputInvalid, input.ClientType)
+		}
+		// Typed keys are deliberately single-platform. The provider owns this
+		// policy instead of trusting a caller-supplied permissions array.
+		permissions = []string{permission}
+	} else if len(permissions) == 0 {
+		// Transitional compatibility for the already-deployed singular-key
+		// YunMoProject client. New callers must always send client_type.
 		permissions = defaultYunMoStarPermissions
 	}
 	allowed := map[string]bool{YunMoStarPermissionClaude: true, PlatformOpenAI: true, PlatformGemini: true}
@@ -93,6 +113,9 @@ func normalizeYunMoStarInput(input YunMoStarRelayKeyInput) (YunMoStarRelayKeyInp
 	tags := make(map[string]struct{}, len(input.Tags)+2)
 	tags["ymstar"] = struct{}{}
 	tags["uid:"+input.ExternalUserID] = struct{}{}
+	if input.ClientType != "" {
+		tags["client:"+input.ClientType] = struct{}{}
+	}
 	for _, tag := range input.Tags {
 		if tag = strings.TrimSpace(tag); tag != "" {
 			tags[tag] = struct{}{}
@@ -109,7 +132,40 @@ func normalizeYunMoStarInput(input YunMoStarRelayKeyInput) (YunMoStarRelayKeyInp
 	if input.Department != "" {
 		input.SourceMetadata["department"] = input.Department
 	}
+	if input.ClientType != "" {
+		input.SourceMetadata["client_type"] = input.ClientType
+	}
 	return input, nil
+}
+
+func yunMoStarClientPermission(clientType string) (string, bool) {
+	switch clientType {
+	case YunMoStarClientCodex:
+		return PlatformOpenAI, true
+	case YunMoStarClientClaudeCode:
+		return YunMoStarPermissionClaude, true
+	case YunMoStarClientGemini:
+		return PlatformGemini, true
+	default:
+		return "", false
+	}
+}
+
+func (s *YunMoStarIntegrationService) clientGroupPolicy(clientType string) (groupID int64, platform string, err error) {
+	switch clientType {
+	case YunMoStarClientCodex:
+		return s.config.CodexGroupID, PlatformOpenAI, nil
+	case YunMoStarClientClaudeCode:
+		return s.config.ClaudeCodeGroupID, PlatformAnthropic, nil
+	case YunMoStarClientGemini:
+		return s.config.GeminiGroupID, PlatformGemini, nil
+	case "":
+		// Backward compatibility only: prefer the explicit Codex group, but
+		// allow the pre-client_type integration to keep working during rollout.
+		return s.config.CodexGroupID, PlatformOpenAI, nil
+	default:
+		return 0, "", fmt.Errorf("%w: unsupported client_type %q", ErrExternalInputInvalid, clientType)
+	}
 }
 
 func (s *YunMoStarIntegrationService) Create(ctx context.Context, input YunMoStarRelayKeyInput) (*YunMoStarRelayKeyResult, error) {
@@ -143,17 +199,27 @@ func (s *YunMoStarIntegrationService) upsert(ctx context.Context, sourceKeyID st
 	txCtx := dbent.NewTxContext(ctx, tx)
 	client := tx.Client()
 
-	// YunMoProject relay keys are multi-protocol keys. Sub2API still requires
-	// every key to belong to one active group, so anchor them to the deployment's
-	// OpenAI group and use explicit protocol routes for Gemini/Claude. Keeping
-	// this lookup inside the transaction makes create/update fail closed when the
-	// required routing group has not been provisioned yet.
-	targetGroup, err := client.Group.Query().Where(
-		dbgroup.PlatformEQ(PlatformOpenAI),
+	groupID, expectedPlatform, err := s.clientGroupPolicy(input.ClientType)
+	if err != nil {
+		return nil, err
+	}
+	groupQuery := client.Group.Query().Where(
+		dbgroup.PlatformEQ(expectedPlatform),
 		dbgroup.StatusEQ(StatusActive),
 		dbgroup.DeletedAtIsNil(),
-	).Order(dbent.Asc(dbgroup.FieldID)).First(txCtx)
+	)
+	if groupID > 0 {
+		groupQuery = groupQuery.Where(dbgroup.IDEQ(groupID))
+	} else if input.ClientType != "" {
+		return nil, fmt.Errorf("%w: group id is not configured for client_type %q", ErrExternalInputInvalid, input.ClientType)
+	}
+	// The untyped compatibility path alone may fall back to the first OpenAI
+	// group. Typed requests always resolve one explicitly configured group.
+	targetGroup, err := groupQuery.Order(dbent.Asc(dbgroup.FieldID)).First(txCtx)
 	if err != nil {
+		if dbent.IsNotFound(err) {
+			return nil, fmt.Errorf("%w: configured group %d is not active %s", ErrExternalInputInvalid, groupID, expectedPlatform)
+		}
 		return nil, fmt.Errorf("resolve YunMoProject routing group: %w", err)
 	}
 
@@ -302,13 +368,16 @@ func (s *YunMoStarIntegrationService) upsert(ctx context.Context, sourceKeyID st
 	}
 	s.apiKeyService.InvalidateAuthCacheByKey(ctx, keyEntity.Key)
 	result := &YunMoStarRelayKeyResult{
-		SourceKeyID: sourceKeyID,
-		APIKeyID:    keyEntity.ID,
-		UserID:      userEntity.ID,
-		Name:        keyEntity.Name,
-		Prefix:      keyPrefix(keyEntity.Key),
-		Tags:        input.Tags,
-		Permissions: input.Permissions,
+		SourceKeyID:   sourceKeyID,
+		APIKeyID:      keyEntity.ID,
+		UserID:        userEntity.ID,
+		ClientType:    input.ClientType,
+		GroupID:       targetGroup.ID,
+		GroupPlatform: targetGroup.Platform,
+		Name:          keyEntity.Name,
+		Prefix:        keyPrefix(keyEntity.Key),
+		Tags:          input.Tags,
+		Permissions:   input.Permissions,
 	}
 	if revealKey && created {
 		result.Key = keyEntity.Key
