@@ -9,9 +9,10 @@ import (
 )
 
 const (
-	captureChunkBytes = 32 << 10
-	captureQueueDepth = 8
-	maxStreamCaptures = 512
+	captureChunkBytes        = 32 << 10
+	captureQueueDepth        = 64
+	captureWriterBufferBytes = 256 << 10
+	maxStreamCaptures        = 512
 )
 
 var (
@@ -182,7 +183,9 @@ func (c *StreamCapture) run() {
 		<-streamCaptureSlots
 		close(c.done)
 	}()
-	buffered := bufio.NewWriterSize(c.writer, 64<<10)
+	// Absorb short storage-latency spikes in memory and flush larger writes.
+	// The queue remains bounded and producers remain strictly non-blocking.
+	buffered := bufio.NewWriterSize(c.writer, captureWriterBufferBytes)
 	for chunk := range c.queue {
 		c.mu.Lock()
 		failed := c.err != nil && !errors.Is(c.err, ErrCaptureBackpressure) && !errors.Is(c.err, ErrCaptureProducerTimeout)

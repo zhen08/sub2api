@@ -15,6 +15,16 @@ type blockingCaptureWriter struct {
 	buffer  bytes.Buffer
 }
 
+type delayedCaptureWriter struct {
+	delay  time.Duration
+	buffer bytes.Buffer
+}
+
+func (w *delayedCaptureWriter) Write(payload []byte) (int, error) {
+	time.Sleep(w.delay)
+	return w.buffer.Write(payload)
+}
+
 func (w *blockingCaptureWriter) Write(payload []byte) (int, error) {
 	w.once.Do(func() { close(w.started) })
 	<-w.release
@@ -24,11 +34,11 @@ func (w *blockingCaptureWriter) Write(payload []byte) (int, error) {
 func TestStreamCaptureNeverBlocksProducerOnSlowDisk(t *testing.T) {
 	t.Parallel()
 	writer := &blockingCaptureWriter{started: make(chan struct{}), release: make(chan struct{})}
-	capture, err := NewStreamCapture(writer, 2<<20)
+	capture, err := NewStreamCapture(writer, 8<<20)
 	if err != nil {
 		t.Fatal(err)
 	}
-	payload := bytes.Repeat([]byte("x"), 2<<20)
+	payload := bytes.Repeat([]byte("x"), 8<<20)
 	startedAt := time.Now()
 	capture.WriteCapture(payload)
 	if elapsed := time.Since(startedAt); elapsed > 250*time.Millisecond {
@@ -64,5 +74,23 @@ func TestStreamCapturePreservesCompletePayload(t *testing.T) {
 	}
 	if !bytes.Equal(output.Bytes(), payload) {
 		t.Fatalf("captured %d bytes, want %d", output.Len(), len(payload))
+	}
+}
+
+func TestStreamCaptureAbsorbsShortStorageLatencyBurst(t *testing.T) {
+	t.Parallel()
+	writer := &delayedCaptureWriter{delay: 25 * time.Millisecond}
+	capture, err := NewStreamCapture(writer, 2<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	payload := bytes.Repeat([]byte("burst"), (1<<20)/len("burst"))
+	capture.WriteCapture(payload)
+	snapshot := capture.Finish()
+	if snapshot.Err != nil || snapshot.Incomplete || snapshot.Truncated {
+		t.Fatalf("snapshot = %+v", snapshot)
+	}
+	if !bytes.Equal(writer.buffer.Bytes(), payload) {
+		t.Fatalf("captured %d bytes, want %d", writer.buffer.Len(), len(payload))
 	}
 }
