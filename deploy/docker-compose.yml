@@ -21,6 +21,8 @@ services:
     restart: unless-stopped
     # 5s HTTP drain + 20s audit/runtime cleanup, with margin before SIGKILL.
     stop_grace_period: 35s
+    security_opt:
+      - no-new-privileges:true
     ulimits:
       nofile:
         soft: 100000

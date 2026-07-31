@@ -14,9 +14,9 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-// v17 combines the local per-key platform permissions added in v16 with
-// upstream's group reasoning-effort ceiling and mappings snapshot fields.
-const apiKeyAuthSnapshotVersion = 17
+// v18 combines the local per-key platform permissions and upstream group
+// reasoning-effort fields with the OpenAI group Live gate added in v17.
+const apiKeyAuthSnapshotVersion = 18
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -412,6 +412,7 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			MCPXMLInject:                    apiKey.Group.MCPXMLInject,
 			SupportedModelScopes:            apiKey.Group.SupportedModelScopes,
 			AllowMessagesDispatch:           apiKey.Group.AllowMessagesDispatch,
+			AllowLive:                       apiKey.Group.AllowLive,
 			DefaultMappedModel:              apiKey.Group.DefaultMappedModel,
 			MessagesDispatchModelConfig:     apiKey.Group.MessagesDispatchModelConfig,
 			ModelsListConfig:                apiKey.Group.ModelsListConfig,
@@ -499,6 +500,7 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			MCPXMLInject:                    snapshot.Group.MCPXMLInject,
 			SupportedModelScopes:            snapshot.Group.SupportedModelScopes,
 			AllowMessagesDispatch:           snapshot.Group.AllowMessagesDispatch,
+			AllowLive:                       snapshot.Group.AllowLive,
 			DefaultMappedModel:              snapshot.Group.DefaultMappedModel,
 			MessagesDispatchModelConfig:     snapshot.Group.MessagesDispatchModelConfig,
 			ModelsListConfig:                snapshot.Group.ModelsListConfig,

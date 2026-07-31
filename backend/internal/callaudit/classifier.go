@@ -89,7 +89,9 @@ func isAIInvocationPath(pathname string) bool {
 	if strings.HasSuffix(pathname, "/messages") ||
 		strings.HasSuffix(pathname, "/chat/completions") ||
 		strings.HasSuffix(pathname, "/completions") ||
-		strings.HasSuffix(pathname, "/embeddings") {
+		strings.HasSuffix(pathname, "/embeddings") ||
+		strings.HasSuffix(pathname, "/live") ||
+		strings.HasSuffix(pathname, "/realtime/calls") {
 		return true
 	}
 	if pathname == "/responses" || strings.HasSuffix(pathname, "/responses") ||
@@ -126,6 +128,8 @@ func classifyProtocol(pathname string) Protocol {
 		strings.Contains(pathname, "/chat/completions") ||
 		strings.HasSuffix(pathname, "/completions") ||
 		strings.HasSuffix(pathname, "/embeddings") ||
+		strings.HasSuffix(pathname, "/live") ||
+		strings.HasSuffix(pathname, "/realtime/calls") ||
 		strings.HasSuffix(pathname, "/responses") || strings.Contains(pathname, "/responses/"):
 		return ProtocolOpenAI
 	case strings.HasSuffix(pathname, "/messages"):

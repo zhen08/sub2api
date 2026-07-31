@@ -17,6 +17,8 @@ func TestClassifyRoute(t *testing.T) {
 		{name: "legacy completions", method: "POST", target: "/api/v1/completions", eligible: true, protocol: ProtocolAnthropic},
 		{name: "responses operation", method: "POST", target: "/v1/responses/resp_1/cancel", eligible: true, protocol: ProtocolOpenAI},
 		{name: "codex direct responses", method: "POST", target: "/backend-api/codex/responses", eligible: true, protocol: ProtocolOpenAI},
+		{name: "openai live", method: "POST", target: "/v1/live", eligible: true, protocol: ProtocolOpenAI},
+		{name: "codex direct live", method: "POST", target: "/backend-api/codex/realtime/calls", eligible: true, protocol: ProtocolOpenAI},
 		{name: "gemini cli", method: "POST", target: "/gemini-cli/api/v1/models/gemini:streamGenerateContent", eligible: true, protocol: ProtocolGeminiCLI},
 		{name: "antigravity", method: "POST", target: "/antigravity/api/v1/chat/completions", eligible: true, protocol: ProtocolAntigravity},
 		{name: "count tokens excluded", method: "POST", target: "/api/v1/messages/count_tokens", eligible: false, protocol: ProtocolAnthropic},
