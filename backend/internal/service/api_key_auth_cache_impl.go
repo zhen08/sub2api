@@ -14,9 +14,10 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-// v18 combines the local per-key platform permissions and upstream group
-// reasoning-effort fields with the OpenAI group Live gate added in v17.
-const apiKeyAuthSnapshotVersion = 18
+// v19 combines local per-key platform permissions with upstream reasoning,
+// OpenAI Live-gate, and group profit-control fields. Bump from both branches'
+// v18 so snapshots created before this semantic merge are refreshed.
+const apiKeyAuthSnapshotVersion = 19
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -423,6 +424,9 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			PeakStart:                       apiKey.Group.PeakStart,
 			PeakEnd:                         apiKey.Group.PeakEnd,
 			PeakRateMultiplier:              apiKey.Group.PeakRateMultiplier,
+			ProfitControlEnabled:            apiKey.Group.ProfitControlEnabled,
+			ProfitMinMargin:                 apiKey.Group.ProfitMinMargin,
+			ProfitSafetyBuffer:              apiKey.Group.ProfitSafetyBuffer,
 		}
 	}
 	return snapshot
@@ -511,6 +515,9 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			PeakStart:                       snapshot.Group.PeakStart,
 			PeakEnd:                         snapshot.Group.PeakEnd,
 			PeakRateMultiplier:              snapshot.Group.PeakRateMultiplier,
+			ProfitControlEnabled:            snapshot.Group.ProfitControlEnabled,
+			ProfitMinMargin:                 snapshot.Group.ProfitMinMargin,
+			ProfitSafetyBuffer:              snapshot.Group.ProfitSafetyBuffer,
 		}
 	}
 	s.compileAPIKeyIPRules(apiKey)
