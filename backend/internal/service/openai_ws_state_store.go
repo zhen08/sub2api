@@ -12,11 +12,12 @@ import (
 )
 
 const (
-	openAIWSResponseAccountCachePrefix = "openai:response:"
-	openAIWSStateStoreCleanupInterval  = time.Minute
-	openAIWSStateStoreCleanupMaxPerMap = 512
-	openAIWSStateStoreMaxEntriesPerMap = 65536
-	openAIWSStateStoreRedisTimeout     = 3 * time.Second
+	openAIWSResponseAccountCachePrefix  = "openai:response:"
+	openAIWSStateStoreCleanupInterval   = time.Minute
+	openAIWSStateStoreCleanupMaxPerMap  = 512
+	openAIWSStateStoreMaxEntriesPerMap  = 65536
+	openAIWSStateStoreRedisTimeout      = 3 * time.Second
+	openAIWSStateStoreRedisWriteTimeout = time.Second
 )
 
 type openAIWSAccountBinding struct {
@@ -110,7 +111,12 @@ func (s *defaultOpenAIWSStateStore) BindResponseAccount(ctx context.Context, gro
 		return nil
 	}
 	cacheKey := openAIWSResponseAccountCacheKey(id)
-	cacheCtx, cancel := withOpenAIWSStateStoreRedisTimeout(ctx)
+	// The response has already been delivered when most bindings are persisted.
+	// Clients commonly cancel the request context after receiving the terminal
+	// event, but the Redis binding must remain available to another replica (or
+	// after a restart) for previous_response_id routing. Preserve context values,
+	// detach cancellation, and keep the write strictly bounded.
+	cacheCtx, cancel := withOpenAIWSStateStoreRedisWriteTimeout(ctx)
 	defer cancel()
 	return s.cache.SetSessionAccountID(cacheCtx, groupID, cacheKey, accountID, ttl)
 }
@@ -444,4 +450,11 @@ func withOpenAIWSStateStoreRedisTimeout(ctx context.Context) (context.Context, c
 		ctx = context.Background()
 	}
 	return context.WithTimeout(ctx, openAIWSStateStoreRedisTimeout)
+}
+
+func withOpenAIWSStateStoreRedisWriteTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	return context.WithTimeout(context.WithoutCancel(ctx), openAIWSStateStoreRedisWriteTimeout)
 }

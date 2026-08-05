@@ -163,6 +163,8 @@ type openAIWSStateStoreTimeoutProbeCache struct {
 	setDeadlineDelta  time.Duration
 	getDeadlineDelta  time.Duration
 	delDeadlineDelta  time.Duration
+	setContextErr     error
+	setErr            error
 }
 
 func (c *openAIWSStateStoreTimeoutProbeCache) GetSessionAccountID(ctx context.Context, _ int64, _ string) (int64, error) {
@@ -178,7 +180,8 @@ func (c *openAIWSStateStoreTimeoutProbeCache) SetSessionAccountID(ctx context.Co
 		c.setHasDeadline = true
 		c.setDeadlineDelta = time.Until(deadline)
 	}
-	return errors.New("set failed")
+	c.setContextErr = ctx.Err()
+	return c.setErr
 }
 
 func (c *openAIWSStateStoreTimeoutProbeCache) RefreshSessionTTL(context.Context, int64, string, time.Duration) error {
@@ -194,7 +197,7 @@ func (c *openAIWSStateStoreTimeoutProbeCache) DeleteSessionAccountID(ctx context
 }
 
 func TestOpenAIWSStateStore_RedisOpsUseShortTimeout(t *testing.T) {
-	probe := &openAIWSStateStoreTimeoutProbeCache{}
+	probe := &openAIWSStateStoreTimeoutProbeCache{setErr: errors.New("set failed")}
 	store := NewOpenAIWSStateStore(probe)
 	ctx := context.Background()
 	groupID := int64(5)
@@ -211,8 +214,8 @@ func TestOpenAIWSStateStore_RedisOpsUseShortTimeout(t *testing.T) {
 	require.True(t, probe.setHasDeadline, "SetSessionAccountID 应携带独立超时上下文")
 	require.True(t, probe.deleteHasDeadline, "DeleteSessionAccountID 应携带独立超时上下文")
 	require.False(t, probe.getHasDeadline, "GetSessionAccountID 本用例应由本地缓存命中，不触发 Redis 读取")
-	require.Greater(t, probe.setDeadlineDelta, 2*time.Second)
-	require.LessOrEqual(t, probe.setDeadlineDelta, 3*time.Second)
+	require.Greater(t, probe.setDeadlineDelta, 500*time.Millisecond)
+	require.LessOrEqual(t, probe.setDeadlineDelta, time.Second)
 	require.Greater(t, probe.delDeadlineDelta, 2*time.Second)
 	require.LessOrEqual(t, probe.delDeadlineDelta, 3*time.Second)
 
@@ -224,6 +227,21 @@ func TestOpenAIWSStateStore_RedisOpsUseShortTimeout(t *testing.T) {
 	require.True(t, probe2.getHasDeadline, "GetSessionAccountID 在缓存未命中时应携带独立超时上下文")
 	require.Greater(t, probe2.getDeadlineDelta, 2*time.Second)
 	require.LessOrEqual(t, probe2.getDeadlineDelta, 3*time.Second)
+}
+
+func TestOpenAIWSStateStore_BindResponseAccountOutlivesCanceledRequest(t *testing.T) {
+	probe := &openAIWSStateStoreTimeoutProbeCache{}
+	store := NewOpenAIWSStateStore(probe)
+	parent, cancelParent := context.WithCancel(context.Background())
+	cancelParent()
+
+	err := store.BindResponseAccount(parent, 6, "resp_completed", 1, time.Hour)
+
+	require.NoError(t, err)
+	require.True(t, probe.setHasDeadline, "Redis 写入必须保持独立的短超时")
+	require.NoError(t, probe.setContextErr, "已完成响应的请求取消不应中止 Redis 粘连写入")
+	require.Greater(t, probe.setDeadlineDelta, 500*time.Millisecond)
+	require.LessOrEqual(t, probe.setDeadlineDelta, time.Second)
 }
 
 func TestWithOpenAIWSStateStoreRedisTimeout_WithParentContext(t *testing.T) {

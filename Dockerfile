@@ -97,7 +97,7 @@ RUN --mount=type=cache,id=sub2api-gomod,target=/go/pkg/mod \
     -o /app/sub2api \
     ./cmd/server
 
-RUN CGO_ENABLED=0 GOOS=linux go build \
+RUN CGO_ENABLED=0 GOOS=${TARGETOS:-linux} GOARCH=${TARGETARCH} go build \
     -trimpath \
     -ldflags="-s -w" \
     -o /app/call-audit-migrate \
