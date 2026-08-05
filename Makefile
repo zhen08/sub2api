@@ -1,4 +1,4 @@
-.PHONY: build build-backend build-frontend test test-backend test-frontend test-frontend-critical
+.PHONY: build build-backend build-frontend build-vm101-image test test-backend test-frontend test-frontend-critical test-vm101-version-contract
 
 FRONTEND_CRITICAL_VITEST := \
 	src/api/__tests__/client.spec.ts \
@@ -21,6 +21,9 @@ build-backend:
 build-frontend:
 	@pnpm --dir frontend run build
 
+build-vm101-image:
+	@./deploy/build_vm101_image.sh
+
 # 运行测试（后端 + 前端）
 test: test-backend test-frontend
 
@@ -34,3 +37,6 @@ test-frontend:
 
 test-frontend-critical:
 	@pnpm --dir frontend exec vitest run $(FRONTEND_CRITICAL_VITEST)
+
+test-vm101-version-contract:
+	@./deploy/tests/vm101-version-contract-test.sh
