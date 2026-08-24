@@ -73,7 +73,8 @@ func ClassifyRoute(method, target string) RouteClassification {
 		}
 	}
 	if strings.HasSuffix(pathname, "/messages/count_tokens") ||
-		strings.HasSuffix(pathname, "/messages/count-tokens") {
+		strings.HasSuffix(pathname, "/messages/count-tokens") ||
+		strings.HasSuffix(pathname, "/responses/input_tokens") {
 		return classification
 	}
 

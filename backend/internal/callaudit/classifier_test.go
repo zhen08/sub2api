@@ -22,6 +22,7 @@ func TestClassifyRoute(t *testing.T) {
 		{name: "gemini cli", method: "POST", target: "/gemini-cli/api/v1/models/gemini:streamGenerateContent", eligible: true, protocol: ProtocolGeminiCLI},
 		{name: "antigravity", method: "POST", target: "/antigravity/api/v1/chat/completions", eligible: true, protocol: ProtocolAntigravity},
 		{name: "count tokens excluded", method: "POST", target: "/api/v1/messages/count_tokens", eligible: false, protocol: ProtocolAnthropic},
+		{name: "responses input tokens excluded", method: "POST", target: "/backend-api/codex/responses/input_tokens", eligible: false, protocol: ProtocolOpenAI},
 		{name: "models excluded", method: "POST", target: "/openai/v1/models", eligible: false, protocol: ProtocolOpenAI},
 		{name: "admin excluded", method: "POST", target: "/api/v1/admin/chat/completions", eligible: false, protocol: ProtocolAnthropic},
 		{name: "read excluded", method: "GET", target: "/v1/messages", eligible: false, protocol: ProtocolAnthropic},
