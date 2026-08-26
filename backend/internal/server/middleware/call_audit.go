@@ -185,7 +185,14 @@ func NewCallAuditMiddleware(runtime *callaudit.Runtime) CallAuditMiddleware {
 				if requestCapture != nil {
 					requestCapture.prepareCapture()
 					if requestCapture.captureErr != nil {
-						runtime.RecordCaptureFailure(requestCapture.captureErr)
+						runtime.RecordCaptureFailureWithAttrs(
+							requestCapture.captureErr,
+							"artifact_kind", string(callaudit.ArtifactClientRequest),
+							"request_id", session.Scope().RequestID,
+							"content_length", requestSnapshot.ContentLength,
+							"accepted_bytes", requestCapture.acceptedBytes,
+							"written_bytes", requestCapture.writtenBytes,
+						)
 						meta["requestCaptureWriteError"] = true
 					}
 					if requestCapture.sourceErr != nil {
@@ -212,7 +219,13 @@ func NewCallAuditMiddleware(runtime *callaudit.Runtime) CallAuditMiddleware {
 						meta["responseCaptureIncomplete"] = true
 					}
 					if captureWriter.captureErr != nil {
-						runtime.RecordCaptureFailure(captureWriter.captureErr)
+						runtime.RecordCaptureFailureWithAttrs(
+							captureWriter.captureErr,
+							"artifact_kind", string(callaudit.ArtifactResponse),
+							"request_id", session.Scope().RequestID,
+							"accepted_bytes", captureWriter.acceptedBytes,
+							"written_bytes", captureWriter.writtenBytes,
+						)
 						meta["responseCaptureWriteError"] = true
 					}
 				}
@@ -379,16 +392,18 @@ func nullableAuditString(value string) any {
 }
 
 type callAuditRequestBody struct {
-	source     io.ReadCloser
-	capture    *os.File
-	stream     *callaudit.StreamCapture
-	readBytes  int64
-	eof        bool
-	closed     bool
-	truncated  bool
-	incomplete bool
-	sourceErr  error
-	captureErr error
+	source        io.ReadCloser
+	capture       *os.File
+	stream        *callaudit.StreamCapture
+	readBytes     int64
+	eof           bool
+	closed        bool
+	truncated     bool
+	incomplete    bool
+	sourceErr     error
+	captureErr    error
+	acceptedBytes int64
+	writtenBytes  int64
 }
 
 func (r *callAuditRequestBody) Read(payload []byte) (int, error) {
@@ -435,6 +450,8 @@ func (r *callAuditRequestBody) prepareCapture() {
 	r.truncated = snapshot.Truncated
 	r.incomplete = snapshot.Incomplete
 	r.captureErr = snapshot.Err
+	r.acceptedBytes = snapshot.Accepted
+	r.writtenBytes = snapshot.Written
 }
 
 func (r *callAuditRequestBody) complete(contentLength int64) bool {
@@ -570,11 +587,13 @@ func skipJSONValue(decoder *json.Decoder) error {
 
 type callAuditResponseWriter struct {
 	gin.ResponseWriter
-	stream     *callaudit.StreamCapture
-	truncated  bool
-	incomplete bool
-	captureErr error
-	writeErr   error
+	stream        *callaudit.StreamCapture
+	truncated     bool
+	incomplete    bool
+	captureErr    error
+	writeErr      error
+	acceptedBytes int64
+	writtenBytes  int64
 }
 
 func (w *callAuditResponseWriter) finishCapture() {
@@ -585,6 +604,8 @@ func (w *callAuditResponseWriter) finishCapture() {
 	w.truncated = snapshot.Truncated
 	w.incomplete = w.incomplete || snapshot.Incomplete
 	w.captureErr = snapshot.Err
+	w.acceptedBytes = snapshot.Accepted
+	w.writtenBytes = snapshot.Written
 }
 
 func (w *callAuditResponseWriter) Write(payload []byte) (int, error) {

@@ -460,11 +460,21 @@ func (r *Runtime) StartSession(input ScopeInput) (*Session, error) {
 }
 
 func (r *Runtime) RecordCaptureFailure(err error) {
+	r.RecordCaptureFailureWithAttrs(err)
+}
+
+// RecordCaptureFailureWithAttrs keeps the common failure counter while adding
+// bounded operational context for failures that otherwise collapse to the same
+// backpressure error. Callers must not include request bodies or credentials.
+func (r *Runtime) RecordCaptureFailureWithAttrs(err error, attrs ...any) {
 	if r == nil || err == nil {
 		return
 	}
 	r.captureFailures.Add(1)
-	slog.Warn("call audit capture degraded", "error", err)
+	fields := make([]any, 0, len(attrs)+2)
+	fields = append(fields, "error", err)
+	fields = append(fields, attrs...)
+	slog.Warn("call audit capture degraded", fields...)
 }
 
 // RunFinalize keeps disk fsync/rename work off the client response path while
