@@ -71,13 +71,13 @@ func RegisterGatewayRoutes(
 			h.Gateway.CountTokens(c)
 		}
 	}
+	codexModelsHandler := func(c *gin.Context) {
+		dispatchCodexModelsGateway(c, h.OpenAIGateway.CodexModels, h.Gateway.CodexModels)
+	}
 	modelsHandler := func(c *gin.Context) {
 		if c.Query("client_version") != "" {
-			switch getGroupPlatform(c) {
-			case service.PlatformOpenAI, service.PlatformComposite:
-				h.OpenAIGateway.CodexModels(c)
-				return
-			}
+			codexModelsHandler(c)
+			return
 		}
 		h.Gateway.Models(c)
 	}
@@ -379,7 +379,7 @@ func RegisterGatewayRoutes(
 		codexDirect.GET("/responses", func(c *gin.Context) {
 			h.OpenAIGateway.ResponsesWebSocket(c)
 		})
-		codexDirect.GET("/models", h.OpenAIGateway.CodexModels)
+		codexDirect.GET("/models", codexModelsHandler)
 	}
 	// OpenAI Chat Completions API（不带v1前缀的别名）— auto-route based on group platform
 	r.POST("/chat/completions", bodyLimit, clientRequestID, opsErrorLogger, endpointNorm, gin.HandlerFunc(apiKeyAuth), callAuditHandler, compositeTarget, requireGroupAnthropic, chatCompletionsHandler)
@@ -619,6 +619,14 @@ func writeLegacyCompletionsError(c *gin.Context, message string) {
 		"type":    "invalid_request_error",
 		"code":    "invalid_request",
 	}})
+}
+
+func dispatchCodexModelsGateway(c *gin.Context, openAIHandler, generatedHandler gin.HandlerFunc) {
+	if getGroupPlatform(c) == service.PlatformOpenAI {
+		openAIHandler(c)
+		return
+	}
+	generatedHandler(c)
 }
 
 // getGroupPlatform extracts the group platform from the API Key stored in context.

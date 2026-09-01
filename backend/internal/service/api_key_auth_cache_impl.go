@@ -14,11 +14,10 @@ import (
 	"github.com/dgraph-io/ristretto"
 )
 
-// v21 combines local per-key platform permissions and upstream search/audio/
-// video-model, long-context, and model-pricing fields. Both branches used v20
-// for different snapshot shapes, so merged deployments must refresh all
-// pre-merge entries.
-const apiKeyAuthSnapshotVersion = 21
+// v22 adds upstream per-user public-group restrictions to the local v21 shape.
+// Existing v21 entries do not carry RestrictPublicGroups and must be refreshed
+// or restricted users could temporarily retain access to unintended groups.
+const apiKeyAuthSnapshotVersion = 22
 
 type apiKeyAuthCacheConfig struct {
 	l1Size        int
@@ -365,6 +364,7 @@ func (s *APIKeyService) snapshotFromAPIKey(ctx context.Context, apiKey *APIKey) 
 			Email:                      apiKey.User.Email,
 			Username:                   apiKey.User.Username,
 			BalanceNotifyEnabled:       apiKey.User.BalanceNotifyEnabled,
+			RestrictPublicGroups:       apiKey.User.RestrictPublicGroups,
 			BalanceNotifyThresholdType: apiKey.User.BalanceNotifyThresholdType,
 			BalanceNotifyThreshold:     apiKey.User.BalanceNotifyThreshold,
 			BalanceNotifyExtraEmails:   apiKey.User.BalanceNotifyExtraEmails,
@@ -470,6 +470,7 @@ func (s *APIKeyService) snapshotToAPIKey(key string, snapshot *APIKeyAuthSnapsho
 			Email:                      snapshot.User.Email,
 			Username:                   snapshot.User.Username,
 			BalanceNotifyEnabled:       snapshot.User.BalanceNotifyEnabled,
+			RestrictPublicGroups:       snapshot.User.RestrictPublicGroups,
 			BalanceNotifyThresholdType: snapshot.User.BalanceNotifyThresholdType,
 			BalanceNotifyThreshold:     snapshot.User.BalanceNotifyThreshold,
 			BalanceNotifyExtraEmails:   snapshot.User.BalanceNotifyExtraEmails,

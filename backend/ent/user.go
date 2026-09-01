@@ -60,6 +60,8 @@ type User struct {
 	LastLoginAt *time.Time `json:"last_login_at,omitempty"`
 	// LastActiveAt holds the value of the "last_active_at" field.
 	LastActiveAt *time.Time `json:"last_active_at,omitempty"`
+	// RestrictPublicGroups holds the value of the "restrict_public_groups" field.
+	RestrictPublicGroups bool `json:"restrict_public_groups,omitempty"`
 	// BalanceNotifyEnabled holds the value of the "balance_notify_enabled" field.
 	BalanceNotifyEnabled bool `json:"balance_notify_enabled,omitempty"`
 	// BalanceNotifyThresholdType holds the value of the "balance_notify_threshold_type" field.
@@ -246,7 +248,7 @@ func (*User) scanValues(columns []string) ([]any, error) {
 		switch columns[i] {
 		case user.FieldSourceMetadata:
 			values[i] = new([]byte)
-		case user.FieldTotpEnabled, user.FieldBalanceNotifyEnabled:
+		case user.FieldTotpEnabled, user.FieldRestrictPublicGroups, user.FieldBalanceNotifyEnabled:
 			values[i] = new(sql.NullBool)
 		case user.FieldBalance, user.FieldFrozenBalance, user.FieldBalanceNotifyThreshold, user.FieldTotalRecharged:
 			values[i] = new(sql.NullFloat64)
@@ -409,6 +411,12 @@ func (_m *User) assignValues(columns []string, values []any) error {
 			} else if value.Valid {
 				_m.LastActiveAt = new(time.Time)
 				*_m.LastActiveAt = value.Time
+			}
+		case user.FieldRestrictPublicGroups:
+			if value, ok := values[i].(*sql.NullBool); !ok {
+				return fmt.Errorf("unexpected type %T for field restrict_public_groups", values[i])
+			} else if value.Valid {
+				_m.RestrictPublicGroups = value.Bool
 			}
 		case user.FieldBalanceNotifyEnabled:
 			if value, ok := values[i].(*sql.NullBool); !ok {
@@ -625,6 +633,9 @@ func (_m *User) String() string {
 		builder.WriteString("last_active_at=")
 		builder.WriteString(v.Format(time.ANSIC))
 	}
+	builder.WriteString(", ")
+	builder.WriteString("restrict_public_groups=")
+	builder.WriteString(fmt.Sprintf("%v", _m.RestrictPublicGroups))
 	builder.WriteString(", ")
 	builder.WriteString("balance_notify_enabled=")
 	builder.WriteString(fmt.Sprintf("%v", _m.BalanceNotifyEnabled))
