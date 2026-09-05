@@ -312,6 +312,10 @@ func extractAPIKeyForGateway(c *gin.Context) string {
 			return strings.TrimSpace(parts[1])
 		}
 		// Older CRS clients sent the API key as a bare Authorization value.
+		// Do not interpret another authentication scheme as a bare key.
+		if strings.ContainsAny(authorization, " \t\r\n") {
+			return ""
+		}
 		return authorization
 	}
 	return strings.TrimSpace(c.GetHeader("api-key"))

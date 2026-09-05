@@ -18,6 +18,8 @@ func TestExtractAPIKeyForGatewayCRSCompatibility(t *testing.T) {
 		{name: "google key", headers: map[string]string{"x-goog-api-key": "goog-key"}, want: "goog-key"},
 		{name: "bearer", headers: map[string]string{"Authorization": "Bearer bearer-key"}, want: "bearer-key"},
 		{name: "bare authorization", headers: map[string]string{"Authorization": "bare-key"}, want: "bare-key"},
+		{name: "basic is not a bare key", headers: map[string]string{"Authorization": "Basic not-a-bearer-key"}},
+		{name: "tab separated scheme is not a bare key", headers: map[string]string{"Authorization": "Basic\tnot-a-bearer-key"}},
 		{name: "api key", headers: map[string]string{"api-key": "legacy-key"}, want: "legacy-key"},
 		{
 			name: "legacy priority",
