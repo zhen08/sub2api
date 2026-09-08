@@ -1,6 +1,7 @@
 .PHONY: build build-backend build-frontend build-vm101-image test test-backend test-frontend test-frontend-critical test-vm101-version-contract
 
 FRONTEND_CRITICAL_VITEST := \
+	src/i18n/__tests__/localeKeyCompleteness.spec.ts \
 	src/api/__tests__/client.spec.ts \
 	src/api/__tests__/tokenRefresh.spec.ts \
 	src/api/__tests__/channelMonitorV2.spec.ts \

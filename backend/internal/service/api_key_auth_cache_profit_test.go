@@ -50,11 +50,13 @@ func profitAuthTestAPIKey() *APIKey {
 func TestAPIKeyAuthSnapshotProfitControlRoundtrip(t *testing.T) {
 	svc := &APIKeyService{}
 	apiKey := profitAuthTestAPIKey()
+	apiKey.Permissions = []string{"gateway"}
+	apiKey.Group.ModelAllowlist = GroupModelAllowlist{Enabled: true, Models: []string{"gpt-5.4"}}
 
 	snapshot := svc.snapshotFromAPIKey(context.Background(), apiKey)
 	require.NotNil(t, snapshot)
 	require.Equal(t, apiKeyAuthSnapshotVersion, snapshot.Version)
-	require.Equal(t, 24, snapshot.Version, "v24 combines local authorization and upstream Codex model manifest fields")
+	require.Equal(t, 25, snapshot.Version, "v25 combines local authorization and upstream model allowlist fields")
 
 	// 模拟 L2 缓存的完整 JSON 往返（与 apiKeyCache.SetAuthCache/GetAuthCache 同构）。
 	payload, err := json.Marshal(&APIKeyAuthCacheEntry{Snapshot: snapshot})
@@ -66,6 +68,8 @@ func TestAPIKeyAuthSnapshotProfitControlRoundtrip(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, used)
 	require.NotNil(t, materialized.Group)
+	require.Equal(t, apiKey.Permissions, materialized.Permissions)
+	require.Equal(t, apiKey.Group.ModelAllowlist, materialized.Group.ModelAllowlist)
 	require.True(t, materialized.User.RestrictPublicGroups)
 	require.True(t, materialized.Group.Hydrated)
 	require.True(t, materialized.Group.ProfitControlEnabled)
@@ -81,10 +85,10 @@ func TestAPIKeyAuthSnapshotProfitControlRoundtrip(t *testing.T) {
 	require.InDelta(t, 0.06*(1-0.25), gate.threshold, 1e-12)
 }
 
-// Reject older schemas, including local and upstream v23 variants that lack
-// the merged authorization or Codex model manifest fields.
+// Reject older schemas, including local and upstream v24 variants that lack
+// the merged authorization or model allowlist fields.
 func TestAPIKeyAuthSnapshotOldVersionEvicted(t *testing.T) {
-	for _, version := range []int{21, 22, 23} {
+	for _, version := range []int{21, 22, 23, 24} {
 		svc := &APIKeyService{}
 		snapshot := svc.snapshotFromAPIKey(context.Background(), profitAuthTestAPIKey())
 		require.NotNil(t, snapshot)
