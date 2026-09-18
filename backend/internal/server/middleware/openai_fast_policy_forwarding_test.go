@@ -172,7 +172,10 @@ type openAIFastPolicyForwardingSettingRepo struct {
 	value string
 }
 
-func (r *openAIFastPolicyForwardingSettingRepo) GetValue(context.Context, string) (string, error) {
+func (r *openAIFastPolicyForwardingSettingRepo) GetValue(_ context.Context, key string) (string, error) {
+	if key != service.SettingKeyOpenAIFastPolicySettings {
+		return "", service.ErrSettingNotFound
+	}
 	return r.value, nil
 }
 

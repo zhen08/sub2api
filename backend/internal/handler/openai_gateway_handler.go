@@ -570,7 +570,11 @@ func (h *OpenAIGatewayHandler) Responses(c *gin.Context) {
 	}
 
 	// 解析渠道级模型映射
-	channelMapping, _ := h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), apiKey.GroupID, reqModel)
+	channelMapping, policyErr := h.gatewayService.ResolveUserOpenAIChannelMapping(c.Request.Context(), apiKey.GroupID, reqModel)
+	if policyErr != nil {
+		h.errorResponse(c, http.StatusServiceUnavailable, "api_error", "User model policy unavailable")
+		return
+	}
 	forwardBody := openAIModelMappedBody(body, channelMapping.Mapped, channelMapping.MappedModel, h.gatewayService.ReplaceModelInBody)
 	seedOpenAIForwardImageIntentHint(c, channelMapping.Mapped, imageIntent)
 	forwardModel := openAIChannelForwardModel(channelMapping, reqModel)
@@ -1208,6 +1212,17 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 	bindOpenAIReasoningEffortPolicyForMessagesRequest(c, apiKey, body)
 	routingModel := service.NormalizeOpenAICompatRequestedModel(reqModel)
 	preferredMappedModel := resolveOpenAIMessagesDispatchMappedModel(c, apiKey, reqModel)
+	var ingressPolicyErr error
+	routingModel, ingressPolicyErr = h.gatewayService.ClampUserOpenAIModel(c.Request.Context(), routingModel)
+	if ingressPolicyErr != nil {
+		h.anthropicErrorResponse(c, http.StatusServiceUnavailable, "api_error", "User model policy unavailable")
+		return
+	}
+	preferredMappedModel, ingressPolicyErr = h.gatewayService.ClampUserOpenAIModel(c.Request.Context(), preferredMappedModel)
+	if ingressPolicyErr != nil {
+		h.anthropicErrorResponse(c, http.StatusServiceUnavailable, "api_error", "User model policy unavailable")
+		return
+	}
 	reqStream := gjson.GetBytes(body, "stream").Bool()
 
 	reqLog = reqLog.With(zap.String("model", reqModel), zap.Bool("stream", reqStream))
@@ -1221,7 +1236,11 @@ func (h *OpenAIGatewayHandler) Messages(c *gin.Context) {
 	}
 
 	// 解析渠道级模型映射
-	channelMappingMsg, _ := h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), apiKey.GroupID, reqModel)
+	channelMappingMsg, policyErr := h.gatewayService.ResolveUserOpenAIChannelMapping(c.Request.Context(), apiKey.GroupID, reqModel)
+	if policyErr != nil {
+		h.anthropicErrorResponse(c, http.StatusServiceUnavailable, "api_error", "User model policy unavailable")
+		return
+	}
 	mappedBodyForMessages := newOpenAIModelMappedBodyCache(body, h.gatewayService.ReplaceModelInBody)
 
 	// 绑定错误透传服务，允许 service 层在非 failover 错误场景复用规则。
@@ -2475,7 +2494,11 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 	}
 
 	// 解析渠道级模型映射
-	channelMappingWS, _ := h.gatewayService.ResolveChannelMappingAndRestrict(ctx, apiKey.GroupID, reqModel)
+	channelMappingWS, policyErr := h.gatewayService.ResolveUserOpenAIChannelMapping(ctx, apiKey.GroupID, reqModel)
+	if policyErr != nil {
+		closeOpenAIClientWS(wsConn, coderws.StatusTryAgainLater, "User model policy unavailable")
+		return
+	}
 	wsForwardModel := openAIChannelForwardModel(channelMappingWS, reqModel)
 
 	var currentUserRelease func()
@@ -2848,7 +2871,10 @@ func (h *OpenAIGatewayHandler) ResponsesWebSocket(c *gin.Context) {
 					model = reqModel
 				}
 				setOpsRequestContext(c, model, true)
-				mapping, _ := h.gatewayService.ResolveChannelMappingAndRestrict(ctx, apiKey.GroupID, model)
+				mapping, policyErr := h.gatewayService.ResolveUserOpenAIChannelMapping(ctx, apiKey.GroupID, model)
+				if policyErr != nil {
+					return "", policyErr
+				}
 				mappedModelUnchanged := false
 				if previous := turnChannelMapping.Load(); previous != nil && previous.turn < turn {
 					mappedModelUnchanged = strings.TrimSpace(previous.mapping.MappedModel) == strings.TrimSpace(mapping.MappedModel)

@@ -396,6 +396,12 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 			}
 			normalized = next
 		}
+		var userPolicyErr error
+		normalized, userPolicyErr = s.enforceUserOpenAIModelBody(ctx, account, normalized)
+		if userPolicyErr != nil {
+			return openAIWSClientPayload{}, userPolicyErr
+		}
+		upstreamModel = gjson.GetBytes(normalized, "model").String()
 		SetOpsUpstreamModel(c, upstreamModel)
 		if isCodexCLI && codexImageGenerationExplicitToolPolicy == codexImageGenerationExplicitToolPolicyStrip {
 			if stripped, changed, stripErr := stripOpenAIImageGenerationToolsFromRawPayload(normalized); stripErr != nil {
@@ -956,19 +962,27 @@ func (s *OpenAIGatewayService) ProxyResponsesWebSocketFromClient(
 	}
 
 	var rejectedFieldRetryState *openAIResponsesRejectedFieldRetryState
-	sendAndRelay := func(turn int, lease *openAIWSConnLease, payload []byte, payloadBytes int, originalModel string, imageBillingModel string, imageSizeTier string, imageInputSize string, requestedReasoningEffort *string) (*OpenAIForwardResult, error) {
+	sendAndRelay := func(turn int, lease *openAIWSConnLease, payload []byte, payloadBytes int, originalModel string, imageBillingModel string, imageSizeTier string, imageInputSize string, requestedReasoningEffort *string) (result *OpenAIForwardResult, err error) {
+		ctx, finishDispatch := beginUserModelDispatch(ctx, c)
+		defer func() { finishDispatch(result) }()
 		responseModelObserver := &upstreamResponseModelObserver{}
 		if lease == nil {
 			return nil, errors.New("upstream websocket lease is nil")
 		}
 		turnStart := time.Now()
 		wroteDownstream := false
-		if err := lease.WriteJSONWithContextTimeout(ctx, json.RawMessage(payload), s.openAIWSWriteTimeout()); err != nil {
+		finalPayload, dispatchedModel, err := s.writeUserPolicyWSJSONFinalized(ctx, lease, account, json.RawMessage(payload))
+		if err != nil {
 			return nil, wrapOpenAIWSIngressTurnError(
 				"write_upstream",
 				fmt.Errorf("write upstream websocket request: %w", err),
 				false,
 			)
+		}
+		payload = finalPayload
+		payloadBytes = len(payload)
+		if dispatchedModel != "" {
+			SetOpsUpstreamModel(c, dispatchedModel)
 		}
 		if debugEnabled {
 			logOpenAIWSModeDebug(

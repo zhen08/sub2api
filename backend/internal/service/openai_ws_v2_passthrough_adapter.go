@@ -790,7 +790,10 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 		}
 		return NewOpenAIWSClientCloseError(coderws.StatusPolicyViolation, blocked.Message, blocked)
 	}
-	firstClientMessage = updatedFirst
+	firstClientMessage, policyErr = s.enforceUserOpenAIModelBody(ctx, account, updatedFirst)
+	if policyErr != nil {
+		return policyErr
+	}
 
 	// 在 policy filter 之后再提取 service_tier / reasoning_effort 用于
 	// usage 上报：filter 命中时 service_tier 已经从 firstClientMessage 中删除，
@@ -921,8 +924,10 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 	if !ok {
 		return errors.New("openai ws passthrough upstream connection does not support frame relay")
 	}
+	policyUpstreamFrameConn := &userPolicyWSFrameConn{FrameConn: upstreamFrameConn, service: s, account: account, ginContext: c}
+	defer policyUpstreamFrameConn.applyDispatch(nil)
 	relayUpstreamFrameConn := &openAIWSPassthroughFirstOutputFrameConn{
-		inner:             upstreamFrameConn,
+		inner:             policyUpstreamFrameConn,
 		activeReadTimeout: s.openAIWSPassthroughIdleTimeout(),
 		deadlineChanged:   make(chan struct{}, 1),
 		resolveDeadline: func(payload []byte) openAIWSPassthroughFirstOutputDeadline {
@@ -1110,6 +1115,12 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			//     extractOpenAIServiceTierFromBody 返回 nil；这里有意
 			//     覆盖（Store(nil)），因为 OpenAI 上游对该帧实际不传
 			//     service_tier 时按 default 处理，billing 应如实反映。
+			if policyErr == nil && blocked == nil {
+				out, policyErr = s.enforceUserOpenAIModelBody(ctx, account, out)
+				if isResponseCreate {
+					model = gjson.GetBytes(out, "model").String()
+				}
+			}
 			if policyErr == nil && blocked == nil && isResponseCreate {
 				usageMeta.updateFromResponseCreate(out, model, requestModelForThisFrame)
 				_, actualModel := usageMeta.turnModels(requestModelForThisFrame)
@@ -1227,6 +1238,8 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					Duration:                      turn.Duration,
 					FirstTokenMs:                  turn.FirstTokenMs,
 				}
+				policyUpstreamFrameConn.applyDispatch(turnResult)
+				turnUpstreamModel = turnResult.UpstreamModel
 				logOpenAIWSV2Passthrough(
 					"relay_turn_completed account_id=%d turn=%d request_id=%s terminal_event=%s turn_requested_model=%s turn_upstream_model=%s duration_ms=%d first_token_ms=%d input_tokens=%d output_tokens=%d cache_read_tokens=%d",
 					account.ID,
@@ -1286,9 +1299,10 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 					return nil
 				}
 				errCodeRaw, errTypeRaw, errMsgRaw := parseOpenAIWSErrorEventFields(payload)
+				dispatchedModel := policyUpstreamFrameConn.currentDispatchModel(capturedSessionModel)
 				isPreOutputRateLimit := eventType == "error" && !wroteDownstream && isOpenAIWSRateLimitError(errCodeRaw, errTypeRaw, errMsgRaw)
 				if (eventType == "error" || eventType == "response.failed") && !failureAccountSideEffectsApplied && !isPreOutputRateLimit {
-					failureAccountSideEffectsApplied = s.handleOpenAIWSFailureAccountSideEffects(ctx, account, capturedSessionModel, handshakeHeaders, payload)
+					failureAccountSideEffectsApplied = s.handleOpenAIWSFailureAccountSideEffects(ctx, account, dispatchedModel, handshakeHeaders, payload)
 				}
 				if eventType != "error" {
 					return nil
@@ -1296,7 +1310,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 				if wroteDownstream || !isOpenAIWSRateLimitError(errCodeRaw, errTypeRaw, errMsgRaw) {
 					return nil
 				}
-				s.persistOpenAIWSRateLimitSignal(ctx, account, handshakeHeaders, payload, errCodeRaw, errTypeRaw, errMsgRaw, capturedSessionModel)
+				s.persistOpenAIWSRateLimitSignal(ctx, account, handshakeHeaders, payload, errCodeRaw, errTypeRaw, errMsgRaw, dispatchedModel)
 				logOpenAIWSV2Passthrough(
 					"relay_rate_limit_failover account_id=%d err_code=%s err_type=%s err_message=%s",
 					account.ID,
@@ -1418,7 +1432,7 @@ func (s *OpenAIGatewayService) proxyResponsesWebSocketV2Passthrough(
 			wsProxyID,
 			wsProxyName,
 			deadline.startedAt,
-			deadline.requestModel,
+			policyUpstreamFrameConn.currentDispatchModel(deadline.requestModel),
 			deadline.reasoningEffort,
 			deadline.timeout,
 			"websocket_first_semantic_output",

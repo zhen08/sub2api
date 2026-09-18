@@ -32,7 +32,10 @@ func (s *OpenAIGatewayService) ForwardAsAnthropic(
 	body []byte,
 	promptCacheKey string,
 	defaultMappedModel string,
-) (*OpenAIForwardResult, error) {
+) (policyResult *OpenAIForwardResult, policyReturnErr error) {
+	var finishUserModelDispatch func(*OpenAIForwardResult)
+	ctx, finishUserModelDispatch = beginUserModelDispatch(ctx, c)
+	defer func() { finishUserModelDispatch(policyResult) }()
 	rememberOpenCodeInboundBody(c, body)
 	beginUpstreamResponseModelObservation(c)
 	ClearActualOpenAIUpstreamEndpoint(c)

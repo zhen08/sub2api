@@ -115,7 +115,11 @@ func (h *OpenAIGatewayHandler) ChatCompletions(c *gin.Context) {
 	}
 
 	// 解析渠道级模型映射
-	channelMapping, _ := h.gatewayService.ResolveChannelMappingAndRestrict(c.Request.Context(), apiKey.GroupID, reqModel)
+	channelMapping, policyErr := h.gatewayService.ResolveUserOpenAIChannelMapping(c.Request.Context(), apiKey.GroupID, reqModel)
+	if policyErr != nil {
+		h.errorResponse(c, http.StatusServiceUnavailable, "api_error", "User model policy unavailable")
+		return
+	}
 	forwardModel := openAIChannelForwardModel(channelMapping, reqModel)
 
 	if h.errorPassthroughService != nil {

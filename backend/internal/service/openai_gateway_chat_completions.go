@@ -70,7 +70,10 @@ func (s *OpenAIGatewayService) forwardAsChatCompletions(
 	promptCacheKey string,
 	defaultMappedModel string,
 	compatPromptCacheTenantIsolated bool,
-) (*OpenAIForwardResult, error) {
+) (policyResult *OpenAIForwardResult, policyReturnErr error) {
+	var finishUserModelDispatch func(*OpenAIForwardResult)
+	ctx, finishUserModelDispatch = beginUserModelDispatch(ctx, c)
+	defer func() { finishUserModelDispatch(policyResult) }()
 	rememberOpenCodeInboundBody(c, body)
 	beginUpstreamResponseModelObservation(c)
 	ClearActualOpenAIUpstreamEndpoint(c)

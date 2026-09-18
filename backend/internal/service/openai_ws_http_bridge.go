@@ -420,7 +420,9 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 	grokCacheIdentity string,
 	turn int,
 	writeClientMessage func([]byte) error,
-) (*OpenAIForwardResult, error) {
+) (result *OpenAIForwardResult, err error) {
+	ctx, finishDispatch := beginUserModelDispatch(ctx, c)
+	defer func() { finishDispatch(result) }()
 	if s == nil {
 		return nil, errors.New("service is nil")
 	}
@@ -546,7 +548,17 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 		if buildErr != nil {
 			return nil, buildErr
 		}
-		resp, err = s.doOpenAIUpstream(upstreamReq, proxyURL, account)
+		var finalBody []byte
+		var finalModel string
+		resp, finalBody, finalModel, err = s.doOpenAIUpstreamFinalized(upstreamReq, proxyURL, account)
+		if len(finalBody) > 0 {
+			body = finalBody
+			payloadBytes = len(body)
+		}
+		if finalModel != "" {
+			actualModel = finalModel
+			SetOpsUpstreamModel(c, actualModel)
+		}
 		if err != nil {
 			if turn == 1 {
 				return nil, s.handleOpenAIUpstreamTransportError(ctx, c, account, err, true)
@@ -833,6 +845,16 @@ func (s *OpenAIGatewayService) proxyOpenAIWSHTTPBridgeTurn(
 				} else {
 					shouldFailover = s.shouldFailoverGrokUpstreamError(statusCode, upstreamMessage)
 					s.handleGrokAccountUpstreamError(ctx, account, statusCode, resp.Header, upstreamMessage)
+				}
+			}
+			if account.Platform != PlatformGrok && eventType == "response.failed" && !failureAccountSideEffectsApplied && !requestScopedCapacity {
+				// The failover constructor owns credential/quota side effects. Apply
+				// custom transient cooldowns here because the early return below
+				// otherwise bypasses the shared WS failure handler.
+				switch statusCode {
+				case http.StatusUnauthorized, http.StatusForbidden, http.StatusTooManyRequests, 529:
+				default:
+					failureAccountSideEffectsApplied = s.handleOpenAIWSFailureAccountSideEffects(ctx, account, mappedModel, resp.Header, upstreamMessage)
 				}
 			}
 			if !wroteDownstream && shouldFailover && (turn == 1 || statusCode == http.StatusTooManyRequests) {
