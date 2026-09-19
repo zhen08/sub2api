@@ -26,11 +26,14 @@ import (
 )
 
 type Application struct {
-	Server        *http.Server
-	PromptAudit   *securityaudit.PromptService
-	PluginManager *service.PluginManager
-	Cleanup       func()
+	Server                        *http.Server
+	PromptAudit                   *securityaudit.PromptService
+	PluginManager                 *service.PluginManager
+	PluginAccountDirectoryBinding pluginAccountDirectoryBinding
+	Cleanup                       func()
 }
+
+type pluginAccountDirectoryBinding struct{}
 
 func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 	wire.Build(
@@ -55,14 +58,23 @@ func initializeApplication(buildInfo handler.BuildInfo) (*Application, error) {
 		// BuildInfo provider
 		provideServiceBuildInfo,
 		providePluginHostInfo,
+		bindPluginAccountDirectory,
 
 		// Cleanup function provider
 		provideCleanup,
 
 		// Application struct
-		wire.Struct(new(Application), "Server", "PromptAudit", "PluginManager", "Cleanup"),
+		wire.Struct(new(Application), "Server", "PromptAudit", "PluginManager", "PluginAccountDirectoryBinding", "Cleanup"),
 	)
 	return nil, nil
+}
+
+func bindPluginAccountDirectory(
+	pluginManager *service.PluginManager,
+	openAIGateway *service.OpenAIGatewayService,
+) pluginAccountDirectoryBinding {
+	pluginManager.SetAccountDirectory(openAIGateway)
+	return pluginAccountDirectoryBinding{}
 }
 
 func providePrivacyClientFactory() service.PrivacyClientFactory {

@@ -18,6 +18,8 @@ func TestClassifyRoute(t *testing.T) {
 		{name: "responses operation", method: "POST", target: "/v1/responses/resp_1/cancel", eligible: true, protocol: ProtocolOpenAI},
 		{name: "codex direct responses", method: "POST", target: "/backend-api/codex/responses", eligible: true, protocol: ProtocolOpenAI},
 		{name: "openai live", method: "POST", target: "/v1/live", eligible: true, protocol: ProtocolOpenAI},
+		{name: "seedance canonical", method: "POST", target: "/api/v3/contents/generations/tasks", eligible: true, protocol: ProtocolOpenAI},
+		{name: "seedance alias", method: "POST", target: "/v1/contents/generations/tasks", eligible: true, protocol: ProtocolOpenAI},
 		{name: "codex direct live", method: "POST", target: "/backend-api/codex/realtime/calls", eligible: true, protocol: ProtocolOpenAI},
 		{name: "gemini cli", method: "POST", target: "/gemini-cli/api/v1/models/gemini:streamGenerateContent", eligible: true, protocol: ProtocolGeminiCLI},
 		{name: "antigravity", method: "POST", target: "/antigravity/api/v1/chat/completions", eligible: true, protocol: ProtocolAntigravity},

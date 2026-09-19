@@ -91,6 +91,7 @@ func isAIInvocationPath(pathname string) bool {
 		strings.HasSuffix(pathname, "/chat/completions") ||
 		strings.HasSuffix(pathname, "/completions") ||
 		strings.HasSuffix(pathname, "/embeddings") ||
+		strings.HasSuffix(pathname, "/contents/generations/tasks") ||
 		strings.HasSuffix(pathname, "/live") ||
 		strings.HasSuffix(pathname, "/realtime/calls") {
 		return true
@@ -105,6 +106,8 @@ func isAIInvocationPath(pathname string) bool {
 
 func classifyProtocol(pathname string) Protocol {
 	switch {
+	case strings.HasSuffix(pathname, "/contents/generations/tasks"):
+		return ProtocolOpenAI
 	case strings.HasPrefix(pathname, "/azure/"):
 		return ProtocolAzureOpenAI
 	case strings.HasPrefix(pathname, "/droid/"):
