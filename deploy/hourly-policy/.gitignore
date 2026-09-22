@@ -1,0 +1,11 @@
+# Generated Python files and local-only operational data.
+__pycache__/
+*.py[cod]
+.pytest_cache/
+state.json
+.state-*
+lock
+*.log
+*.jsonl
+.env
+.env.*
