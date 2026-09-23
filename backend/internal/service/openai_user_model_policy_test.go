@@ -81,7 +81,7 @@ func TestOpenAIUserModelPolicyFinalHTTP(t *testing.T) {
 	req.Header.Set("Content-Type", "application/json")
 	_, err = s.doOpenAIUpstream(req, "", account)
 	require.NoError(t, err)
-	require.Equal(t, "gpt-5.6-luna", upstream.models[len(upstream.models)-1])
+	require.Equal(t, "gpt-6-luna", upstream.models[len(upstream.models)-1])
 	count := len(upstream.models)
 	repo.err = errors.New("database offline")
 	req, _ = http.NewRequestWithContext(ctx, "POST", "https://stub/v1/messages", bytes.NewReader([]byte(`{"model":"gpt-4o"}`)))
@@ -100,7 +100,7 @@ func TestOpenAIUserModelPolicyAdversarialBodies(t *testing.T) {
 	for _, model := range []string{"openai/GPT-6-ASTRA-2026-09-04", "gpt-6-astra-high", "gpt-5.6-sol-2026-09-04", "gpt-5.6-terra-high", "openai/gpt_5.6_sol"} {
 		got, e := s.ClampUserOpenAIModel(ctx, model)
 		require.NoError(t, e)
-		require.Equal(t, "gpt-5.6-luna", got, model)
+		require.Equal(t, "gpt-6-luna", got, model)
 	}
 	for _, body := range []string{`{"model":"gpt-4o","model":"gpt-6"}`, `{"model":"gpt-4o","Model":"gpt-6"}`, `{"model":17}`, `{"session":{"model":"gpt-4o","model":"gpt-6"}}`} {
 		_, e := s.enforceUserOpenAIModelBody(ctx, nil, []byte(body))
@@ -110,7 +110,7 @@ func TestOpenAIUserModelPolicyAdversarialBodies(t *testing.T) {
 		b, e := s.enforceUserOpenAIModelBody(ctx, nil, []byte(body))
 		require.NoError(t, e)
 		require.NotContains(t, string(b), "gpt-6-astra")
-		require.Contains(t, string(b), "gpt-5.6-luna")
+		require.Contains(t, string(b), "gpt-6-luna")
 	}
 }
 
@@ -125,7 +125,7 @@ func TestOpenAIUserModelPolicyNoHeaderBypass(t *testing.T) {
 	req, _ := http.NewRequestWithContext(ctx, "POST", "https://stub/v1/responses", bytes.NewBufferString(`{"model":"gpt-6-astra"}`))
 	_, err = s.doOpenAIUpstream(req, "", &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeAPIKey})
 	require.NoError(t, err)
-	require.Equal(t, []string{"gpt-5.6-luna"}, upstream.models)
+	require.Equal(t, []string{"gpt-6-luna"}, upstream.models)
 }
 
 func TestOpenAIUserModelPolicyIngressMapping(t *testing.T) {
@@ -138,7 +138,7 @@ func TestOpenAIUserModelPolicyIngressMapping(t *testing.T) {
 	for _, tc := range []struct{ level, model, want string }{
 		{"original", "gpt-5.6-sol", "gpt-5.6-terra"},
 		{"terra", "openai/GPT-6", "gpt-5.6-terra"},
-		{"luna", "gpt-5.6-sol-high", "gpt-5.6-luna"},
+		{"luna", "gpt-5.6-sol-high", "gpt-6-luna"},
 		{"full", "gpt-5.6-sol", "gpt-5.6-sol"},
 		{"full", "codex-auto-review", "codex-auto-review"},
 	} {

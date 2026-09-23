@@ -43,7 +43,7 @@ func TestOpenAIUserModelPolicyBridgeFinalDispatchMetadata(t *testing.T) {
 	upstream := &httpUpstreamRecorder{resp: &http.Response{
 		StatusCode: http.StatusOK,
 		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
-		Body:       io.NopCloser(strings.NewReader("data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_policy\",\"model\":\"gpt-5.6-luna\",\"status\":\"completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n")),
+		Body:       io.NopCloser(strings.NewReader("data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_policy\",\"model\":\"gpt-6-luna\",\"status\":\"completed\",\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n")),
 	}}
 	svc := &OpenAIGatewayService{cfg: &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}}, httpUpstream: upstream, settingService: settings}
 	account := &Account{ID: 901, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Concurrency: 1}
@@ -54,9 +54,9 @@ func TestOpenAIUserModelPolicyBridgeFinalDispatchMetadata(t *testing.T) {
 	c.Request = httptest.NewRequest(http.MethodGet, "/v1/responses", nil).WithContext(ctx)
 	result, err := svc.proxyOpenAIWSHTTPBridgeTurn(ctx, c, account, "stub", payload, len(payload), "gpt-6-astra", "", "", "", "", 1, func([]byte) error { return nil })
 	require.NoError(t, err)
-	require.Equal(t, "gpt-5.6-luna", gjson.GetBytes(upstream.lastBody, "model").String())
-	require.Equal(t, "gpt-5.6-luna", result.UpstreamModel)
-	require.Equal(t, "gpt-5.6-luna", result.BillingModel)
+	require.Equal(t, "gpt-6-luna", gjson.GetBytes(upstream.lastBody, "model").String())
+	require.Equal(t, "gpt-6-luna", result.UpstreamModel)
+	require.Equal(t, "gpt-6-luna", result.BillingModel)
 }
 
 func TestOpenAIUserModelPolicyBridgeFinalDispatchFailureUsesSentModel(t *testing.T) {
@@ -90,11 +90,11 @@ func TestOpenAIUserModelPolicyBridgeFinalDispatchFailureUsesSentModel(t *testing
 	result, err := svc.proxyOpenAIWSHTTPBridgeTurn(ctx, c, account, "stub", payload, len(payload), "gpt-6-astra", "", "", "", "", 1, func([]byte) error { return nil })
 	require.Error(t, err)
 	require.Nil(t, result)
-	require.Equal(t, "gpt-5.6-luna", gjson.GetBytes(upstream.lastBody, "model").String())
-	require.Equal(t, []string{"gpt-5.6-luna"}, repo.recordedModelKeys())
+	require.Equal(t, "gpt-6-luna", gjson.GetBytes(upstream.lastBody, "model").String())
+	require.Equal(t, []string{"gpt-6-luna"}, repo.recordedModelKeys())
 	opsModel, ok := c.Get(OpsUpstreamModelKey)
 	require.True(t, ok)
-	require.Equal(t, "gpt-5.6-luna", opsModel)
+	require.Equal(t, "gpt-6-luna", opsModel)
 }
 
 func TestOpenAIUserModelPolicyBridgeFinalDispatchResponseFailedUsesSentModel(t *testing.T) {
@@ -130,11 +130,11 @@ func TestOpenAIUserModelPolicyBridgeFinalDispatchResponseFailedUsesSentModel(t *
 	result, err := svc.proxyOpenAIWSHTTPBridgeTurn(ctx, c, account, "stub", payload, len(payload), "gpt-6-astra", "", "", "", "", 1, func([]byte) error { return nil })
 	require.Error(t, err)
 	require.Nil(t, result)
-	require.Equal(t, "gpt-5.6-luna", gjson.GetBytes(upstream.lastBody, "model").String())
-	require.Equal(t, []string{"gpt-5.6-luna"}, repo.recordedModelKeys())
+	require.Equal(t, "gpt-6-luna", gjson.GetBytes(upstream.lastBody, "model").String())
+	require.Equal(t, []string{"gpt-6-luna"}, repo.recordedModelKeys())
 	opsModel, ok := c.Get(OpsUpstreamModelKey)
 	require.True(t, ok)
-	require.Equal(t, "gpt-5.6-luna", opsModel)
+	require.Equal(t, "gpt-6-luna", opsModel)
 }
 
 func TestOpenAIUserModelPolicyBridgeFinalDispatchPreservesImageBillingModel(t *testing.T) {
@@ -146,7 +146,7 @@ func TestOpenAIUserModelPolicyBridgeFinalDispatchPreservesImageBillingModel(t *t
 		StatusCode: http.StatusOK,
 		Header:     http.Header{"Content-Type": []string{"text/event-stream"}},
 		Body: io.NopCloser(strings.NewReader(
-			"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_policy_image\",\"model\":\"gpt-5.6-luna\",\"status\":\"completed\",\"output\":[{\"id\":\"ig_policy_1\",\"type\":\"image_generation_call\",\"status\":\"completed\",\"result\":\"final-image\"}],\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n",
+			"data: {\"type\":\"response.completed\",\"response\":{\"id\":\"resp_policy_image\",\"model\":\"gpt-6-luna\",\"status\":\"completed\",\"output\":[{\"id\":\"ig_policy_1\",\"type\":\"image_generation_call\",\"status\":\"completed\",\"result\":\"final-image\"}],\"usage\":{\"input_tokens\":1,\"output_tokens\":1}}}\n\n",
 		)),
 	}}
 	svc := &OpenAIGatewayService{cfg: &config.Config{Gateway: config.GatewayConfig{MaxLineSize: defaultMaxLineSize}}, httpUpstream: upstream, settingService: settings}
@@ -159,6 +159,6 @@ func TestOpenAIUserModelPolicyBridgeFinalDispatchPreservesImageBillingModel(t *t
 	result, err := svc.proxyOpenAIWSHTTPBridgeTurn(ctx, c, account, "stub", payload, len(payload), "gpt-6-astra", "gpt-image-2", "1K", "", "", 1, func([]byte) error { return nil })
 	require.NoError(t, err)
 	require.Equal(t, 1, result.ImageCount)
-	require.Equal(t, "gpt-5.6-luna", result.UpstreamModel)
+	require.Equal(t, "gpt-6-luna", result.UpstreamModel)
 	require.Equal(t, "gpt-image-2", result.BillingModel)
 }

@@ -70,7 +70,9 @@ func clampUserOpenAIModel(level, model string) string {
 	if isOpenAIGPT6AstraModel(model) {
 		canonical = "gpt-6-astra"
 	}
-	rank := map[string]int{"gpt-6-astra": 4, "gpt-5.6-sol": 3, "gpt-5.6-terra": 2, "gpt-5.6-luna": 1}[canonical]
+	// Policy tiers are not version ordering: both Luna models are below Terra.
+	// Preserve explicit legacy Luna requests; only higher tiers use the new cap.
+	rank := map[string]int{"gpt-6-astra": 4, "gpt-5.6-sol": 3, "gpt-5.6-terra": 2, "gpt-5.6-luna": 1, "gpt-6-luna": 1}[canonical]
 	if rank == 0 {
 		return model
 	}
@@ -78,7 +80,7 @@ func clampUserOpenAIModel(level, model string) string {
 		return "gpt-5.6-terra"
 	}
 	if level == "luna" && rank > 1 {
-		return "gpt-5.6-luna"
+		return "gpt-6-luna"
 	}
 	return canonical
 }
@@ -97,7 +99,7 @@ func (s *OpenAIGatewayService) finalizeUserOpenAIModelBody(ctx context.Context, 
 	}
 	out, err := s.enforceUserOpenAIModelBodyLevel(ctx, account, body, level)
 	if err == nil && level != "original" {
-		observeUserModelDispatch(ctx, body, out)
+		observeUserModelDispatch(ctx, body, out, level)
 	}
 	return out, err
 }
