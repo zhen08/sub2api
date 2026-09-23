@@ -9,9 +9,10 @@ import (
 
 type userModelDispatchKey struct{}
 type userModelDispatchObservation struct {
-	mu        sync.Mutex
-	model     string
-	rewritten bool
+	mu         sync.Mutex
+	model      string
+	rewritten  bool
+	restricted bool
 }
 
 // Dispatch observation is per invocation, not a cached authorization decision.
@@ -24,6 +25,7 @@ func beginUserModelDispatch(ctx context.Context, c *gin.Context) (context.Contex
 		observation.mu.Lock()
 		model := observation.model
 		rewritten := observation.rewritten
+		restricted := observation.restricted
 		observation.mu.Unlock()
 		if model == "" {
 			return
@@ -31,6 +33,9 @@ func beginUserModelDispatch(ctx context.Context, c *gin.Context) (context.Contex
 		SetOpsUpstreamModel(c, model)
 		if result != nil {
 			result.UpstreamModel = model
+			if restricted && result.ImageCount == 0 {
+				result.UserPolicyBillingModel = model
+			}
 			if rewritten && result.ImageCount == 0 {
 				result.BillingModel = model
 			}
@@ -50,7 +55,8 @@ func observeUserModelDispatch(ctx context.Context, before, after []byte, level s
 		// Restricted tier billing must still use the dispatched model, not fall
 		// back to the original higher-tier request. Non-GPT billing is untouched.
 		restrictedTier := (level == "terra" || level == "luna") &&
-			(actual == "gpt-5.6-terra" || actual == "gpt-6-luna" || actual == "gpt-5.6-luna")
+			(actual == "gpt-6-sol" || actual == "gpt-6-luna" || actual == "gpt-5.6-luna")
+		observation.restricted = restrictedTier
 		observation.rewritten = original != actual || restrictedTier
 		observation.mu.Unlock()
 	}

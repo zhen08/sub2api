@@ -1196,6 +1196,17 @@ func (s *PricingService) lookupIdentifiedModelPricingLocked(lookupCandidates []s
 	return nil
 }
 
+// GetExactModelPricing never substitutes a base family or default model.
+// Callers may enumerate known same-model aliases explicitly before this lookup.
+func (s *PricingService) GetExactModelPricing(modelName string) *LiteLLMModelPricing {
+	if s == nil {
+		return nil
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	return s.pricingData[strings.ToLower(strings.TrimSpace(modelName))]
+}
+
 // GetIdentifiedModelPricing 在价格表中确定性地识别模型，识别不到时返回 nil。
 // 与 GetModelPricing 的区别：不会退化成按 "opus"/"haiku" 之类子串猜出的系列兜底价。
 // 用于必须区分"这是价格表里已知的模型"和"这只是名字里带某个关键词"的场景。

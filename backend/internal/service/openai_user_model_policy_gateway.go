@@ -70,14 +70,15 @@ func clampUserOpenAIModel(level, model string) string {
 	if isOpenAIGPT6AstraModel(model) {
 		canonical = "gpt-6-astra"
 	}
-	// Policy tiers are not version ordering: both Luna models are below Terra.
-	// Preserve explicit legacy Luna requests; only higher tiers use the new cap.
-	rank := map[string]int{"gpt-6-astra": 4, "gpt-5.6-sol": 3, "gpt-5.6-terra": 2, "gpt-5.6-luna": 1, "gpt-6-luna": 1}[canonical]
+	// Policy ranks are explicit, not model version ordering. Legacy Luna is
+	// below the Sol cap but above the GPT-6 Luna cap.
+	rank := map[string]int{"gpt-6-astra": 4, "gpt-5.6-sol": 4, "gpt-5.6-terra": 4, "gpt-6-sol": 3, "gpt-5.6-luna": 2, "gpt-6-luna": 1}[canonical]
 	if rank == 0 {
 		return model
 	}
-	if level == "terra" && rank > 2 {
-		return "gpt-5.6-terra"
+	// "terra" remains the persisted/API label for the GPT-6 Sol cap.
+	if level == "terra" && rank > 3 {
+		return "gpt-6-sol"
 	}
 	if level == "luna" && rank > 1 {
 		return "gpt-6-luna"

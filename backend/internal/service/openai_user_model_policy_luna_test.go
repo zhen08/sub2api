@@ -56,9 +56,14 @@ func TestOpenAIUserModelPolicyAlreadyClampedBilling(t *testing.T) {
 		images                int
 	}{
 		{"luna", "gpt-6-luna", "gpt-6-luna", 0},
-		{"luna", "gpt-5.6-luna", "gpt-5.6-luna", 0},
+		{"luna", "gpt-5.6-luna", "gpt-6-luna", 0},
 		{"terra", "gpt-6-luna", "gpt-6-luna", 0},
-		{"terra", "gpt-5.6-terra", "gpt-5.6-terra", 0},
+		{"terra", "gpt-6-sol", "gpt-6-sol", 0},
+		{"terra", "gpt-5.6-sol", "gpt-6-sol", 0},
+		{"terra", "gpt-5.6-terra", "gpt-6-sol", 0},
+		{"terra", "gpt-5.6-luna", "gpt-5.6-luna", 0},
+		{"luna", "gpt-5.6-sol", "gpt-6-luna", 0},
+		{"luna", "gpt-5.6-terra", "gpt-6-luna", 0},
 		{"luna", "gpt-6-luna", "gpt-image-2", 1},
 		{"luna", "claude-sonnet-4", "custom-billing", 0},
 		{"full", "gpt-6-luna", "custom-billing", 0},
@@ -100,7 +105,7 @@ func TestOpenAIUserModelPolicyLunaAliases(t *testing.T) {
 		})
 	}
 	for _, level := range []string{"terra", "luna", "full"} {
-		require.Equal(t, "gpt-5.6-luna", clampUserOpenAIModel(level, "openai/GPT-5.6-LUNA-high"))
+		require.Equal(t, map[string]string{"terra": "gpt-5.6-luna", "luna": "gpt-6-luna", "full": "gpt-5.6-luna"}[level], clampUserOpenAIModel(level, "openai/GPT-5.6-LUNA-high"))
 		for _, model := range []string{"claude-sonnet-4", "gemini-2.5-pro", "gpt-4o", "gpt-6-lunatic"} {
 			require.Equal(t, model, clampUserOpenAIModel(level, model))
 		}

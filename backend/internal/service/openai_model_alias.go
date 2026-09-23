@@ -37,6 +37,15 @@ func normalizeKnownOpenAICodexModel(model string) string {
 		}
 	}
 
+	// Keep GPT-6 Sol distinct from legacy Sol for dispatch and billing. Accept
+	// only the established effort/date/compact suffixes, not arbitrary substrings.
+	if normalized == "gpt-6-sol" {
+		return "gpt-6-sol"
+	}
+	if suffix, ok := strings.CutPrefix(normalized, "gpt-6-sol-"); ok && (suffix == "openai-compact" || isKnownCodexModelSuffix(suffix)) {
+		return "gpt-6-sol"
+	}
+
 	switch {
 	case normalized == "gpt-6-luna" || strings.HasPrefix(normalized, "gpt-6-luna-"):
 		return "gpt-6-luna"

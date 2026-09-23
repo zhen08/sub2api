@@ -65,7 +65,7 @@ func TestOpenAIUserModelPolicyHTTPIngress(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	for _, path := range []string{"responses", "chat/completions", "messages"} {
 		t.Run(path, func(t *testing.T) {
-			repo := openAIImagesFailoverAccountRepo{accounts: []service.Account{{ID: 1, Platform: service.PlatformOpenAI, Type: service.AccountTypeOAuth, Status: service.StatusActive, Schedulable: true, Credentials: map[string]any{"access_token": "stub-token", "model_mapping": map[string]any{"gpt-5.6-terra": "gpt-6-astra", "gpt-6-luna": "gpt-6-astra"}}}}}
+			repo := openAIImagesFailoverAccountRepo{accounts: []service.Account{{ID: 1, Platform: service.PlatformOpenAI, Type: service.AccountTypeOAuth, Status: service.StatusActive, Schedulable: true, Credentials: map[string]any{"access_token": "stub-token", "model_mapping": map[string]any{"gpt-6-sol": "gpt-6-astra", "gpt-6-luna": "gpt-6-astra"}}}}}
 			cfg := &config.Config{RunMode: config.RunModeSimple}
 			upstream := &userPolicyHandlerUpstream{}
 			settings := service.NewSettingService(&userPolicyHandlerSettings{values: map[string]string{}}, cfg)
@@ -98,12 +98,27 @@ func TestOpenAIUserModelPolicyHTTPIngress(t *testing.T) {
 				}
 				require.Equal(t, 200, rec.Code, rec.Body.String())
 				require.NotEmpty(t, upstream.models, rec.Body.String())
-				require.Equal(t, map[string]string{"terra": "gpt-5.6-terra", "luna": "gpt-6-luna"}[level], upstream.models[len(upstream.models)-1])
+				require.Equal(t, map[string]string{"terra": "gpt-6-sol", "luna": "gpt-6-luna"}[level], upstream.models[len(upstream.models)-1])
 				actualModel, _ := c.Get(service.OpsUpstreamModelKey)
-				require.Equal(t, map[string]string{"terra": "gpt-5.6-terra", "luna": "gpt-6-luna"}[level], actualModel, "audit metadata must match actual dispatch")
+				require.Equal(t, map[string]string{"terra": "gpt-6-sol", "luna": "gpt-6-luna"}[level], actualModel, "audit metadata must match actual dispatch")
 			}
 		})
 	}
+}
+
+func TestOpenAIUserModelPolicyWSTurnChargeSelection(t *testing.T) {
+	for _, source := range []string{service.BillingModelSourceRequested, service.BillingModelSourceChannelMapped, service.BillingModelSourceUpstream} {
+		for _, model := range []string{"gpt-6-sol", "gpt-6-luna", "gpt-5.6-luna"} {
+			t.Run(source+"/"+model, func(t *testing.T) {
+				result := &service.OpenAIForwardResult{BillingModel: model, UserPolicyBillingModel: model}
+				mapping := service.ChannelMappingResult{MappedModel: "gpt-5.6-sol", BillingModelSource: source}
+				require.Equal(t, model, openAIWSTurnBillingModel(result, mapping, "gpt-6-astra", "gpt-6-astra"))
+			})
+		}
+	}
+	// Dedicated image billing must not inherit a text-policy marker.
+	result := &service.OpenAIForwardResult{BillingModel: "gpt-image-2", UserPolicyBillingModel: "gpt-6-sol", ImageCount: 1}
+	require.Equal(t, "gpt-image-2", openAIWSTurnBillingModel(result, service.ChannelMappingResult{}, "gpt-6-astra", "gpt-6-astra"))
 }
 
 type userPolicyChannelRepo struct{ service.ChannelRepository }
@@ -202,7 +217,7 @@ func TestOpenAIUserModelPolicyWebSocketHandler(t *testing.T) {
 		require.Equal(t, "response.completed", gjson.GetBytes(body, "type").String(), string(body))
 		want := "gpt-5.6-sol"
 		if level != "full" {
-			want = map[string]string{"terra": "gpt-5.6-terra", "luna": "gpt-6-luna"}[level]
+			want = map[string]string{"terra": "gpt-6-sol", "luna": "gpt-6-luna"}[level]
 		}
 		upstream.mu.Lock()
 		actual := upstream.models[len(upstream.models)-1]

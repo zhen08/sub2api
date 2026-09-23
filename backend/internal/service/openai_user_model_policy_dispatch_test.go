@@ -18,6 +18,20 @@ import (
 )
 
 func TestIndependentPolicyFinalGateMetadata(t *testing.T) {
+	for _, tc := range []struct{ request, upstream string }{
+		{"openai/GPT-6", "gpt-6-astra"},
+		{"gpt-6-sol", "gpt-6-sol"},
+		{"gpt-5.6-sol", "gpt-5.6-sol"},
+		{"gpt-5.6-terra", "gpt-5.6-terra"},
+		{"gpt-5.6-luna", "gpt-5.6-luna"},
+	} {
+		t.Run(tc.upstream, func(t *testing.T) {
+			testIndependentPolicyFinalGateMetadata(t, tc.request, tc.upstream)
+		})
+	}
+}
+
+func testIndependentPolicyFinalGateMetadata(t *testing.T, requestedModel, mappedModel string) {
 	gin.SetMode(gin.TestMode)
 	for _, mode := range []string{OpenAIWSIngressModeCtxPool, OpenAIWSIngressModePassthrough} {
 		t.Run(mode, func(t *testing.T) {
@@ -78,7 +92,7 @@ func TestIndependentPolicyFinalGateMetadata(t *testing.T) {
 			pool := newOpenAIWSConnPool(cfg)
 			defer pool.Close()
 			svc := &OpenAIGatewayService{cfg: cfg, settingService: settings, httpUpstream: &policyRealHTTPUpstream{}, cache: &stubGatewayCache{}, openaiWSResolver: NewOpenAIWSProtocolResolver(cfg), toolCorrector: NewCodexToolCorrector(), openaiWSPool: pool}
-			account := &Account{ID: 901, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Credentials: map[string]any{"api_key": "stub", "base_url": upstream.URL, "model_mapping": map[string]any{"gpt-5.6-terra": "gpt-6-astra", "gpt-6-luna": "gpt-6-astra", "gpt-5.6-luna": "gpt-5.6-luna", "gpt-6-astra": "gpt-6-astra"}}, Extra: map[string]any{"responses_websockets_v2_enabled": true, "openai_apikey_responses_websockets_v2_mode": mode}}
+			account := &Account{ID: 901, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Credentials: map[string]any{"api_key": "stub", "base_url": upstream.URL, "model_mapping": map[string]any{"gpt-6-sol": mappedModel, "gpt-6-luna": mappedModel, "gpt-5.6-luna": "gpt-5.6-luna", mappedModel: mappedModel}}, Extra: map[string]any{"responses_websockets_v2_enabled": true, "openai_apikey_responses_websockets_v2_mode": mode}}
 			ended := make(chan error, 1)
 			gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				conn, e := coderws.Accept(w, r, nil)
@@ -108,7 +122,7 @@ func TestIndependentPolicyFinalGateMetadata(t *testing.T) {
 			for i, level := range []string{"full", "terra", "luna", "full", "luna", "luna", "terra"} {
 				_, err = settings.SetUserOpenAIModelPolicy(ctx, 17, level)
 				require.NoError(t, err)
-				modelField := `,"model":"openai/GPT-6"`
+				modelField := fmt.Sprintf(`,"model":%q`, requestedModel)
 				if i == 2 {
 					modelField = ""
 				} // omitted subsequent model must not retain old cap
@@ -125,13 +139,16 @@ func TestIndependentPolicyFinalGateMetadata(t *testing.T) {
 				want := "gpt-6-luna"
 				if i > 0 {
 					if level == "full" {
-						want = "gpt-6-astra"
+						want = mappedModel
 					} else {
-						want = map[string]string{"terra": "gpt-5.6-terra", "luna": "gpt-6-luna"}[level]
+						want = map[string]string{"terra": "gpt-6-sol", "luna": "gpt-6-luna"}[level]
 					}
 				}
-				if i == 4 {
+				if level == "terra" && requestedModel == "gpt-5.6-luna" {
 					want = "gpt-5.6-luna"
+				}
+				if i == 4 {
+					want = "gpt-6-luna"
 				}
 				// Explicit Luna aliases stay below Terra on the existing connection.
 				if i >= 5 {
@@ -149,7 +166,7 @@ func TestIndependentPolicyFinalGateMetadata(t *testing.T) {
 					if billingModel == "" {
 						billingModel = forwardResultBillingModel(result.Model, result.UpstreamModel)
 					}
-					if level != "full" || i == 0 {
+					if level != "full" || i == 0 || requestedModel == "gpt-6-sol" {
 						require.Equal(t, got, billingModel, "effective usage billing model for every restricted turn")
 					}
 				case <-ctx.Done():

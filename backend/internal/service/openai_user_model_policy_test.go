@@ -68,8 +68,8 @@ func TestOpenAIUserModelPolicyFinalHTTP(t *testing.T) {
 		req.Header.Set("Content-Type", "application/json")
 		_, err = s.doOpenAIUpstream(req, "", account)
 		require.NoError(t, err)
-		want := "gpt-5.6-terra"
-		if model == "gpt-5.6-luna" || model == "gpt-4o" {
+		want := "gpt-6-sol"
+		if model == "gpt-4o" || model == "gpt-5.6-luna" {
 			want = model
 		}
 		require.Equal(t, want, upstream.models[len(upstream.models)-1], model)
@@ -137,7 +137,7 @@ func TestOpenAIUserModelPolicyIngressMapping(t *testing.T) {
 	ctx := WithOpenAIUserModelPolicy(context.Background(), 17, &g)
 	for _, tc := range []struct{ level, model, want string }{
 		{"original", "gpt-5.6-sol", "gpt-5.6-terra"},
-		{"terra", "openai/GPT-6", "gpt-5.6-terra"},
+		{"terra", "openai/GPT-6", "gpt-6-sol"},
 		{"luna", "gpt-5.6-sol-high", "gpt-6-luna"},
 		{"full", "gpt-5.6-sol", "gpt-5.6-sol"},
 		{"full", "codex-auto-review", "codex-auto-review"},

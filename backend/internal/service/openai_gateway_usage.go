@@ -230,6 +230,15 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		result.UpstreamModel,
 		result.Model,
 	)
+	// Final policy-capped text dispatch is authoritative: do not charge the
+	// requested/remapped model, even as a fallback when cap pricing is absent.
+	policyBillingModel := result.UserPolicyBillingModel
+	if result.ImageCount > 0 || result.VideoCount > 0 || result.AudioUsage != nil || result.WebSearchCalls > 0 || result.SearchCount > 0 {
+		policyBillingModel = ""
+	}
+	if policyBillingModel != "" {
+		billingModels = usageBillingModelCandidates(policyBillingModel)
+	}
 	billingModels = s.filterCNProviderBillingModelCandidates(ctx, account, apiKey, billingModels)
 	serviceTier := ""
 	if result.ServiceTier != nil {
@@ -274,7 +283,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 		input.BillingModelSource,
 		result.UpstreamResponseModel,
 		result.UpstreamResponseModelConflict,
-		result.ImageCount > 0 || result.VideoCount > 0 || result.WebSearchCalls > 0 ||
+		policyBillingModel != "" || result.ImageCount > 0 || result.VideoCount > 0 || result.WebSearchCalls > 0 ||
 			result.AudioUsage != nil || result.SearchCount > 0,
 	); responseModel != "" && !strings.EqualFold(responseModel, baselineBillingModel) {
 		if identified, responseChannelPriced := s.hasIdentifiedOpenAIResponsePricing(ctx, responseModel, apiKey); identified {
@@ -299,7 +308,9 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	// Free Fast changes only the customer charge. Keep priority TotalCost and
 	// service_tier for upstream accounting, but evaluate ActualCost once more at
 	// the Standard tier using the same channel, peak, and long-context policy.
-	if groupBillsOpenAIFastAtStandard(apiKey, billingAccount, serviceTier) {
+	// Missing restricted pricing already produced a zero-cost record and warning;
+	// do not lose that record by retrying the same unavailable price at Standard.
+	if groupBillsOpenAIFastAtStandard(apiKey, billingAccount, serviceTier) && !(policyBillingModel != "" && isUsagePricingUnavailableError(err)) {
 		standardCost, standardErr := s.calculateOpenAIRecordUsageCost(
 			ctx,
 			result,
@@ -604,6 +615,12 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageCost(
 		}
 	}
 
+	// Only the server's restricted text-dispatch marker selects strict pricing.
+	// Dedicated media/search and all original/full/no-policy paths stay unchanged.
+	if result != nil && result.UserPolicyBillingModel != "" && result.ImageCount == 0 && result.VideoCount == 0 && result.AudioUsage == nil && result.WebSearchCalls == 0 && result.SearchCount == 0 {
+		return s.calculatePolicyTextUsageCost(ctx, result, apiKey, billingModels, tokens, multiplier, serviceTier, longContextBillingGate, pricingAt)
+	}
+
 	// Token path (optional search surcharge is additive — never replaces token cost).
 	var tokenCost *CostBreakdown
 	var lastErr error
@@ -674,6 +691,72 @@ func (s *OpenAIGatewayService) calculateOpenAIRecordUsageCost(
 	tokenCost.TotalCost += searchCost.TotalCost
 	tokenCost.ActualCost += searchCost.ActualCost
 	return tokenCost, nil
+}
+
+// calculatePolicyTextUsageCost uses the actual identified price, not a permissive
+// lookup after a separate admission check (which could still substitute models).
+func (s *OpenAIGatewayService) calculatePolicyTextUsageCost(ctx context.Context, result *OpenAIForwardResult, apiKey *APIKey, models []string, tokens UsageTokens, multiplier float64, serviceTier string, longContextGate *bool, pricingAt time.Time) (*CostBreakdown, error) {
+	resolver := s.resolver
+	if resolver == nil {
+		resolver = NewModelPricingResolver(nil, s.billingService)
+	}
+	for _, model := range models {
+		pricing, _ := s.billingService.getModelPricingAtPolicy(model, pricingAt, true)
+		resolved := &ResolvedPricing{Mode: BillingModeToken, BasePricing: pricing, Source: PricingSourceLiteLLM, SupportsCacheBreakdown: pricing != nil && pricing.SupportsCacheBreakdown, longContextPricingEnabled: apiKey.Group == nil || apiKey.Group.LongContextPricingEnabled}
+		// Never use Resolve here: even an exact channel card can inherit unrelated
+		// catalog rates (including priority ratios) through its permissive base lookup.
+		var configured *ChannelModelPricing
+		if s.resolver != nil && apiKey.Group != nil {
+			if card := matchGroupModelPricing(apiKey.Group, model); policyPricingCardMatches(card, model) {
+				cloned := card.Clone()
+				cloned.Intervals = nil // retain normal group-card semantics
+				configured = &cloned
+				resolved.Source = PricingSourceGroup
+			} else if card := resolver.lookupChannelPricingNormalized(ctx, apiKey.Group.ID, model); policyPricingCardMatches(card, model) {
+				configured = card
+				resolved.Source = PricingSourceChannel
+			}
+		}
+		if configured != nil {
+			resolved.channelPricing = configured
+			resolved.Mode = configured.BillingMode
+			if resolved.Mode == "" {
+				resolved.Mode = BillingModeToken
+			}
+			if resolved.Mode == BillingModeToken {
+				resolver.applyTokenOverrides(configured, resolved)
+			} else {
+				resolver.applyRequestTierOverrides(configured, resolved)
+			}
+		} else if pricing == nil {
+			continue
+		}
+		return s.billingService.CalculateCostUnified(CostInput{
+			Ctx: ctx, Model: model, Group: apiKey.Group, Tokens: tokens, RequestCount: 1,
+			RateMultiplier: multiplier, PricingAt: pricingAt, ServiceTier: serviceTier,
+			ReasoningEffort: optionalStringValue(result.ReasoningEffort), Resolver: resolver, Resolved: resolved,
+			LongContextBillingEnabled: longContextGate,
+		})
+	}
+	return nil, fmt.Errorf("%w: restricted text dispatch has no same-model price", ErrModelPricingUnavailable)
+}
+
+// Only exact configured cards (or a known alias of the same model) may
+// override policy text pricing. A wildcard is not evidence of a model price.
+func policyPricingCardMatches(card *ChannelModelPricing, model string) bool {
+	if card == nil {
+		return false
+	}
+	for _, configured := range card.Models {
+		if normalizeChannelPricingModelName(configured) == normalizeChannelPricingModelName(model) {
+			return true
+		}
+		canonical := normalizeKnownOpenAICodexModel(configured)
+		if canonical != "" && canonical == normalizeKnownOpenAICodexModel(model) {
+			return true
+		}
+	}
+	return false
 }
 
 func isGrokVideoBillingModel(model string) bool {

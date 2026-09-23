@@ -131,6 +131,9 @@ func openAIWSIngressEndedByClient(err error) bool {
 }
 
 func openAIWSTurnBillingModel(result *service.OpenAIForwardResult, mapping service.ChannelMappingResult, requestedModel, upstreamModel string) string {
+	if result != nil && result.UserPolicyBillingModel != "" && result.ImageCount == 0 && result.VideoCount == 0 && result.AudioUsage == nil && result.WebSearchCalls == 0 && result.SearchCount == 0 {
+		return result.UserPolicyBillingModel
+	}
 	billingModel := ""
 	if result != nil {
 		billingModel = strings.TrimSpace(result.BillingModel)

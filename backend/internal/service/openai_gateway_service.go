@@ -243,6 +243,9 @@ type OpenAIForwardResult struct {
 	// This is set by the Anthropic Messages conversion path where
 	// the mapped upstream model differs from the client-facing model.
 	BillingModel string
+	// UserPolicyBillingModel is trusted final-dispatch evidence, never request
+	// input. Restricted text turns use it ahead of channel billing preferences.
+	UserPolicyBillingModel string
 	// UpstreamModel is the actual model sent to the upstream provider after mapping.
 	// Empty when no mapping was applied (requested model was used as-is).
 	UpstreamModel string

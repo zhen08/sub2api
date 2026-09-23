@@ -1236,12 +1236,22 @@ func (s *BillingService) GetModelPricing(model string) (*ModelPricing, error) {
 // 驱动 DeepSeek pro→Flash 切换判定（切换点前 Pro 价、之后 Flash 价），使
 // 展示/估算路径可与历史补账同刻复算，测试也能用固定时点钉住断言。
 func (s *BillingService) getModelPricingAt(model string, pricingAt time.Time) (*ModelPricing, error) {
+	return s.getModelPricingAtPolicy(model, pricingAt, false)
+}
+
+// identifiedOnly forbids family/default substitutions for authoritative policy dispatch.
+func (s *BillingService) getModelPricingAtPolicy(model string, pricingAt time.Time, identifiedOnly bool) (*ModelPricing, error) {
 	// 标准化模型名称（转小写）
 	model = strings.ToLower(model)
 
 	// 1. 优先从动态价格服务获取
 	if s.pricingService != nil {
-		litellmPricing := s.pricingService.GetModelPricing(model)
+		var litellmPricing *LiteLLMModelPricing
+		if identifiedOnly {
+			litellmPricing = s.pricingService.GetExactModelPricing(model)
+		} else {
+			litellmPricing = s.pricingService.GetModelPricing(model)
+		}
 		// 仅有图片价、无 token 价的条目（如 LiteLLM 的 imagen 类模型）不能用于
 		// token 计费：直接返回会把 token 流量按 $0 计费。跳过后走 fallback，
 		// 无 fallback 则 fail-closed（ErrModelPricingUnavailable）。
@@ -1282,7 +1292,12 @@ func (s *BillingService) getModelPricingAt(model string, pricingAt time.Time) (*
 	}
 
 	// 2. 使用硬编码回退价格
-	fallback := s.getFallbackPricing(model)
+	var fallback *ModelPricing
+	if identifiedOnly {
+		fallback = s.fallbackPrices[model]
+	} else {
+		fallback = s.getFallbackPricing(model)
+	}
 	if fallback != nil {
 		// 按模型名去重:每个模型每进程最多打一条 warn,避免热路径每请求刷屏（issue #3394）。
 		// model 在函数入口已 ToLower,故 GLM-5.2 / glm-5.2 视为同一条目。

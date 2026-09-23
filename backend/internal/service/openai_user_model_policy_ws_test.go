@@ -24,6 +24,20 @@ func (*policyRealHTTPUpstream) Do(req *http.Request, _ string, _ int64, _ int) (
 }
 
 func TestOpenAIUserModelPolicyExistingWebSocket(t *testing.T) {
+	for _, tc := range []struct{ request, upstream string }{
+		{"openai/GPT-6", "gpt-6-astra"},
+		{"gpt-6-sol", "gpt-6-sol"},
+		{"gpt-5.6-sol", "gpt-5.6-sol"},
+		{"gpt-5.6-terra", "gpt-5.6-terra"},
+		{"gpt-5.6-luna", "gpt-5.6-luna"},
+	} {
+		t.Run(tc.upstream, func(t *testing.T) {
+			testOpenAIUserModelPolicyExistingWebSocket(t, tc.request, tc.upstream)
+		})
+	}
+}
+
+func testOpenAIUserModelPolicyExistingWebSocket(t *testing.T, requestedModel, mappedModel string) {
 	gin.SetMode(gin.TestMode)
 	for _, mode := range []string{OpenAIWSIngressModeCtxPool, OpenAIWSIngressModePassthrough, OpenAIWSIngressModeHTTPBridge} {
 		t.Run(mode, func(t *testing.T) {
@@ -81,7 +95,7 @@ func TestOpenAIUserModelPolicyExistingWebSocket(t *testing.T) {
 			pool := newOpenAIWSConnPool(cfg)
 			defer pool.Close()
 			svc := &OpenAIGatewayService{cfg: cfg, settingService: settings, httpUpstream: &policyRealHTTPUpstream{}, cache: &stubGatewayCache{}, openaiWSResolver: NewOpenAIWSProtocolResolver(cfg), toolCorrector: NewCodexToolCorrector(), openaiWSPool: pool}
-			account := &Account{ID: 901, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Credentials: map[string]any{"api_key": "stub", "base_url": upstream.URL, "model_mapping": map[string]any{"gpt-5.6-terra": "gpt-6-astra", "gpt-6-luna": "gpt-6-astra", "gpt-5.6-luna": "gpt-5.6-luna", "gpt-6-astra": "gpt-6-astra"}}, Extra: map[string]any{"responses_websockets_v2_enabled": true, "openai_apikey_responses_websockets_v2_mode": mode}}
+			account := &Account{ID: 901, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Credentials: map[string]any{"api_key": "stub", "base_url": upstream.URL, "model_mapping": map[string]any{"gpt-6-sol": mappedModel, "gpt-6-luna": mappedModel, "gpt-5.6-luna": "gpt-5.6-luna", mappedModel: mappedModel}}, Extra: map[string]any{"responses_websockets_v2_enabled": true, "openai_apikey_responses_websockets_v2_mode": mode}}
 			ended := make(chan error, 1)
 			gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				conn, e := coderws.Accept(w, r, nil)
@@ -111,7 +125,7 @@ func TestOpenAIUserModelPolicyExistingWebSocket(t *testing.T) {
 			for i, level := range []string{"full", "terra", "luna", "full", "luna", "luna", "terra"} {
 				_, err = settings.SetUserOpenAIModelPolicy(ctx, 17, level)
 				require.NoError(t, err)
-				modelField := `,"model":"openai/GPT-6"`
+				modelField := fmt.Sprintf(`,"model":%q`, requestedModel)
 				if i == 2 {
 					modelField = ""
 				} // omitted subsequent model must not retain old cap
@@ -125,12 +139,15 @@ func TestOpenAIUserModelPolicyExistingWebSocket(t *testing.T) {
 				_, event, e := client.Read(ctx)
 				require.NoError(t, e, string(event))
 				require.Equal(t, "response.completed", gjson.GetBytes(event, "type").String(), string(event))
-				want := "gpt-6-astra"
+				want := mappedModel
 				if level != "full" {
-					want = map[string]string{"terra": "gpt-5.6-terra", "luna": "gpt-6-luna"}[level]
+					want = map[string]string{"terra": "gpt-6-sol", "luna": "gpt-6-luna"}[level]
+				}
+				if level == "terra" && requestedModel == "gpt-5.6-luna" {
+					want = "gpt-5.6-luna"
 				}
 				if i == 4 {
-					want = "gpt-5.6-luna"
+					want = "gpt-6-luna"
 				}
 				// Explicit Luna aliases stay below Terra on the existing connection.
 				if i >= 5 {

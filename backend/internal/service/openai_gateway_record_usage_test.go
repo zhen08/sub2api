@@ -3,6 +3,10 @@ package service
 import (
 	"context"
 	"errors"
+	"fmt"
+	"github.com/gin-gonic/gin"
+	"github.com/stretchr/testify/assert"
+	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
@@ -1838,6 +1842,192 @@ func TestOpenAIGatewayServiceRecordUsage_ChannelMappedOverridesBillingModelWhenM
 	require.True(t, usageRepo.lastLog.ActualCost > 0, "cost must not be zero")
 }
 
+func TestOpenAIUserModelPolicyMissingPriceDoesNotChargeOriginal(t *testing.T) {
+	for _, capModel := range []string{"gpt-6-sol", "gpt-6-luna"} {
+		for _, fallback := range []string{"gpt-6", "gpt-5.4"} {
+			for _, unified := range []bool{false, true} {
+				for _, freeFast := range []bool{false, true} {
+					for _, source := range []string{BillingModelSourceRequested, BillingModelSourceChannelMapped, BillingModelSourceUpstream, BillingModelSourceResponse} {
+						t.Run(fmt.Sprintf("%s/%s/unified=%t/freeFast=%t/%s", capModel, fallback, unified, freeFast, source), func(t *testing.T) {
+							usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+							userRepo := &openAIRecordUsageUserRepoStub{}
+							svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, &openAIRecordUsageSubRepoStub{}, nil)
+							svc.billingService = NewBillingService(svc.cfg, &PricingService{pricingData: map[string]*LiteLLMModelPricing{
+								"gpt-6-astra": {InputCostPerToken: 9e-6, OutputCostPerToken: 9e-6},
+								fallback:      {InputCostPerToken: 8e-6, OutputCostPerToken: 8e-6},
+							}})
+							svc.billingService.fallbackPrices = map[string]*ModelPricing{}
+							key := &APIKey{ID: 10}
+							if unified {
+								svc.resolver = NewModelPricingResolver(nil, svc.billingService)
+								key.Group = &Group{ID: 5}
+							}
+							result := &OpenAIForwardResult{Model: "gpt-6-astra", BillingModel: capModel, UpstreamModel: capModel, UserPolicyBillingModel: capModel, UpstreamResponseModel: "gpt-6-astra", Usage: OpenAIUsage{InputTokens: 20, OutputTokens: 10}}
+							if freeFast {
+								key.Group = &Group{ID: 5, Platform: PlatformOpenAI, FreeOpenAIFast: true}
+								tier := "priority"
+								result.ServiceTier = &tier
+							}
+
+							err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{Result: result, APIKey: key, User: &User{ID: 17}, Account: &Account{ID: 30, Platform: PlatformOpenAI}, ChannelUsageFields: ChannelUsageFields{OriginalModel: "gpt-6-astra", ChannelMappedModel: "gpt-6-astra", BillingModelSource: source}})
+							require.NoError(t, err)
+							require.NotNil(t, usageRepo.lastLog)
+							assert.Zero(t, usageRepo.lastLog.ActualCost)
+							assert.Zero(t, usageRepo.lastLog.TotalCost)
+							assert.Zero(t, userRepo.lastAmount)
+							assert.Zero(t, userRepo.deductCalls)
+						})
+					}
+				}
+			}
+		}
+	}
+}
+
+func TestOpenAIUserModelPolicyExactConfiguredCharge(t *testing.T) {
+	for _, capModel := range []string{"gpt-6-sol", "gpt-6-luna"} {
+		for _, source := range []string{"channel", "group"} {
+			for _, configured := range []string{capModel, "gpt-6-astra", "gpt-6*"} {
+				t.Run(capModel+"/"+source+"/"+configured, func(t *testing.T) {
+					usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+					userRepo := &openAIRecordUsageUserRepoStub{}
+					svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, &openAIRecordUsageSubRepoStub{}, nil)
+					svc.billingService = NewBillingService(svc.cfg, &PricingService{pricingData: map[string]*LiteLLMModelPricing{
+						"gpt-6":   {InputCostPerToken: 8e-6, OutputCostPerToken: 8e-6},
+						"gpt-5.4": {InputCostPerToken: 9e-6, OutputCostPerToken: 9e-6},
+					}})
+					price := 2e-6
+					card := ChannelModelPricing{Models: []string{configured}, BillingMode: BillingModeToken, InputPrice: &price, OutputPrice: &price}
+					group := &Group{ID: 5}
+					if source == "group" {
+						group.ModelPricing = []ChannelModelPricing{card}
+						svc.resolver = NewModelPricingResolver(nil, svc.billingService)
+					} else {
+						cache := newEmptyChannelCache()
+						cache.channelByGroupID[group.ID] = &Channel{ID: 1, Status: StatusActive}
+						cache.loadedAt = time.Now()
+						cache.pricingByGroupModel[channelModelKey{groupID: group.ID, model: configured}] = &card
+						cs := &ChannelService{}
+						cs.cache.Store(cache)
+						svc.resolver = NewModelPricingResolver(cs, svc.billingService)
+					}
+					result := &OpenAIForwardResult{Model: capModel, UpstreamModel: capModel, UserPolicyBillingModel: capModel, Usage: OpenAIUsage{InputTokens: 20, OutputTokens: 10}}
+					err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{Result: result, APIKey: &APIKey{ID: 10, Group: group}, User: &User{ID: 17}, Account: &Account{ID: 30}})
+					require.NoError(t, err)
+					require.NotNil(t, usageRepo.lastLog)
+					expected := 0.0
+					if configured == capModel {
+						expected = 30 * price * 1.1
+					}
+					require.InDelta(t, expected, usageRepo.lastLog.ActualCost, 1e-12)
+					require.InDelta(t, expected, userRepo.lastAmount, 1e-12)
+				})
+			}
+		}
+	}
+}
+
+// Characterization controls: strict pricing must not leak into dedicated media
+// billing or requests without final restricted-policy dispatch evidence.
+func TestOpenAIUserModelPolicyPricingScope(t *testing.T) {
+	for _, capModel := range []string{"gpt-6-sol", "gpt-6-luna"} {
+		for _, mode := range []string{"no_policy", "image", "audio", "exact_catalog", "known_alias", "exact_builtin", "diagnostic"} {
+			t.Run(capModel+"/"+mode, func(t *testing.T) {
+				usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+				userRepo := &openAIRecordUsageUserRepoStub{}
+				svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, &openAIRecordUsageSubRepoStub{}, nil)
+				catalog := &PricingService{pricingData: map[string]*LiteLLMModelPricing{"gpt-6": {InputCostPerToken: 8e-6, OutputCostPerToken: 8e-6}}}
+				svc.billingService = NewBillingService(svc.cfg, catalog)
+				svc.billingService.fallbackPrices = map[string]*ModelPricing{}
+				result := &OpenAIForwardResult{Model: capModel, BillingModel: capModel, UpstreamModel: capModel, UserPolicyBillingModel: capModel, Usage: OpenAIUsage{InputTokens: 20, OutputTokens: 10}}
+				expected := 30 * 2e-6 * 1.1
+				switch mode {
+				case "no_policy":
+					result.UserPolicyBillingModel = ""
+					expected = 30 * 8e-6 * 1.1
+				case "image":
+					result.ImageCount = 1
+					result.ImageSize = "1024x1024"
+					expected = svc.calculateOpenAIImageCost(context.Background(), capModel, &APIKey{ID: 10}, result, 1.1).ActualCost
+				case "audio":
+					result.AudioUsage = &AudioUsage{Mode: "tts", DurationOrUnits: 1}
+					expected = svc.billingService.CalculateAudioCost("tts", 1, nil, 1.1).ActualCost
+				case "exact_catalog", "known_alias":
+					catalog.pricingData[capModel] = &LiteLLMModelPricing{InputCostPerToken: 2e-6, OutputCostPerToken: 2e-6}
+					if mode == "known_alias" {
+						result.UserPolicyBillingModel = capModel + "-high"
+					}
+				case "exact_builtin":
+					svc.billingService.fallbackPrices[capModel] = &ModelPricing{InputPricePerToken: 2e-6, OutputPricePerToken: 2e-6}
+				case "diagnostic":
+					_, err := svc.calculateOpenAIRecordUsageCost(context.Background(), result, &APIKey{ID: 10}, usageBillingModelCandidates(capModel), 1.1, 1.1, 1.1, 1.1, UsageTokens{InputTokens: 20, OutputTokens: 10}, "", nil, time.Now())
+					require.ErrorIs(t, err, ErrModelPricingUnavailable)
+					require.Contains(t, err.Error(), "restricted text dispatch has no same-model price")
+					expected = 0
+				}
+				err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{Result: result, APIKey: &APIKey{ID: 10}, User: &User{ID: 17}, Account: &Account{ID: 30}})
+				require.NoError(t, err)
+				require.NotNil(t, usageRepo.lastLog)
+				if mode != "diagnostic" {
+					require.Positive(t, expected)
+				}
+				require.InDelta(t, expected, usageRepo.lastLog.ActualCost, 1e-12)
+				require.InDelta(t, expected, userRepo.lastAmount, 1e-12)
+			})
+		}
+	}
+}
+
+func TestOpenAIUserModelPolicyActualCharge(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	for _, level := range []string{"terra", "luna", "full", "original"} {
+		for _, source := range []string{BillingModelSourceRequested, BillingModelSourceChannelMapped, BillingModelSourceUpstream, BillingModelSourceResponse} {
+			t.Run(level+"/"+source, func(t *testing.T) {
+				usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
+				userRepo := &openAIRecordUsageUserRepoStub{}
+				svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, &openAIRecordUsageSubRepoStub{}, nil)
+				// Deliberately distinct fixture prices prove which model was charged.
+				svc.billingService = NewBillingService(svc.cfg, &PricingService{pricingData: map[string]*LiteLLMModelPricing{
+					"gpt-6-astra": {InputCostPerToken: 9e-6, OutputCostPerToken: 9e-6},
+					"gpt-5.6-sol": {InputCostPerToken: 7e-6, OutputCostPerToken: 7e-6},
+					"gpt-6-sol":   {InputCostPerToken: 2e-6, OutputCostPerToken: 2e-6},
+					"gpt-6-luna":  {InputCostPerToken: 1e-6, OutputCostPerToken: 1e-6},
+				}})
+				svc.settingService = NewSettingService(&userModelPolicyRepo{values: map[string]string{}}, nil)
+				identity := WithOpenAIUserModelPolicy(context.Background(), 17, nil)
+				if level != "original" {
+					_, err := svc.settingService.SetUserOpenAIModelPolicy(identity, 17, level)
+					require.NoError(t, err)
+				}
+				c, _ := gin.CreateTestContext(httptest.NewRecorder())
+				ctx, finish := beginUserModelDispatch(identity, c)
+				_, err := svc.finalizeUserOpenAIModelBody(ctx, nil, []byte(`{"model":"gpt-6-astra"}`))
+				require.NoError(t, err)
+				result := &OpenAIForwardResult{Model: "gpt-6-astra", UpstreamModel: "gpt-6-astra", BillingModel: "gpt-6-astra", UpstreamResponseModel: "gpt-5.6-sol", Usage: OpenAIUsage{InputTokens: 20, OutputTokens: 10}}
+				finish(result)
+				want := "gpt-6-astra"
+				if source == BillingModelSourceChannelMapped || source == BillingModelSourceResponse {
+					want = "gpt-5.6-sol"
+				}
+				if level == "terra" {
+					want = "gpt-6-sol"
+				}
+				if level == "luna" {
+					want = "gpt-6-luna"
+				}
+				expected, err := svc.billingService.CalculateCost(want, UsageTokens{InputTokens: 20, OutputTokens: 10}, 1.1)
+				require.NoError(t, err)
+				err = svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{Result: result, APIKey: &APIKey{ID: 10}, User: &User{ID: 17}, Account: &Account{ID: 30}, ChannelUsageFields: ChannelUsageFields{OriginalModel: "gpt-6-astra", ChannelMappedModel: "gpt-5.6-sol", BillingModelSource: source}})
+				require.NoError(t, err)
+				require.NotNil(t, usageRepo.lastLog)
+				require.Positive(t, expected.ActualCost)
+				require.InDelta(t, expected.ActualCost, usageRepo.lastLog.ActualCost, 1e-12)
+				require.InDelta(t, expected.ActualCost, userRepo.lastAmount, 1e-12)
+			})
+		}
+	}
+}
+
 func TestOpenAIGatewayServiceRecordUsage_ResponsesMappedBillingModelHonorsBillingModelSource(t *testing.T) {
 	usage := OpenAIUsage{InputTokens: 20, OutputTokens: 10}
 	tokens := UsageTokens{InputTokens: 20, OutputTokens: 10}
@@ -2171,6 +2361,12 @@ func TestOpenAIGatewayServiceRecordUsage_OutputImageSizeWinsBeforeBillingAndPers
 }
 
 func TestOpenAIGatewayServiceRecordUsage_ImageUsesPerImageBillingEvenWithUsageTokens(t *testing.T) {
+	for _, policyModel := range []string{"", "gpt-6-sol", "gpt-6-luna"} {
+		t.Run("policy/"+policyModel, func(t *testing.T) { testOpenAIImageBillingWithPolicyMarker(t, policyModel) })
+	}
+}
+
+func testOpenAIImageBillingWithPolicyMarker(t *testing.T, policyModel string) {
 	imagePrice := 0.02
 	groupID := int64(12)
 
@@ -2181,8 +2377,9 @@ func TestOpenAIGatewayServiceRecordUsage_ImageUsesPerImageBillingEvenWithUsageTo
 
 	err := svc.RecordUsage(context.Background(), &OpenAIRecordUsageInput{
 		Result: &OpenAIForwardResult{
-			RequestID: "resp_image_per_request",
-			Model:     "gpt-image-2",
+			RequestID:              "resp_image_per_request",
+			UserPolicyBillingModel: policyModel,
+			Model:                  "gpt-image-2",
 			Usage: OpenAIUsage{
 				InputTokens:       1110,
 				OutputTokens:      1756,
