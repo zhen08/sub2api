@@ -38,6 +38,8 @@ func normalizeKnownOpenAICodexModel(model string) string {
 	}
 
 	switch {
+	case normalized == "gpt-6-luna" || strings.HasPrefix(normalized, "gpt-6-luna-"):
+		return "gpt-6-luna"
 	case normalized == "gpt-6" || normalized == "gpt-6-astra":
 		return "gpt-6-astra"
 	case strings.Contains(normalized, "gpt-5.6-sol"):

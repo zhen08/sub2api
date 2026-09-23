@@ -242,7 +242,8 @@ class FakeAPI:
         elif path=='/users': rows=[{'id':9,'username':'test','email':'test@example.test'}]
         elif path=='/users/9/api-keys': rows=[{'id':1,'user_id':9,'group_id':6,'key':'SECRET','status':'active'},{'id':2,'user_id':9,'group_id':8,'key':'SECRET','status':'disabled'}]
         elif path=='/channels':
-            rows=[dict(id=2,group_ids=[6],model_mapping={'openai':{'codex-auto-review':'gpt-5.6-luna'}},status='active',billing_model_source='channel_mapped',restrict_models=False,features='',features_config={},model_pricing=[],apply_pricing_to_account_stats=False,account_stats_pricing_rules=[]),dict(id=1,group_ids=[8],model_mapping={'openai':{'codex-auto-review':'gpt-5.6-luna','gpt-5.6-sol':'gpt-5.6-terra'}},status='active',billing_model_source='channel_mapped',restrict_models=False,features='',features_config={},model_pricing=[],apply_pricing_to_account_stats=False,account_stats_pricing_rules=[])]
+            mapping={'openai':{'codex-auto-review':'gpt-6-luna','gpt-5.5':'gpt-6-luna','gpt-5.6-sol':'gpt-6-sol'}}
+            rows=[dict(id=2,group_ids=[6],model_mapping=mapping,status='active',billing_model_source='channel_mapped',restrict_models=False,features='',features_config={},model_pricing=[],apply_pricing_to_account_stats=False,account_stats_pricing_rules=[]),dict(id=1,group_ids=[8],model_mapping=mapping,status='active',billing_model_source='channel_mapped',restrict_models=False,features='',features_config={},model_pricing=[],apply_pricing_to_account_stats=False,account_stats_pricing_rules=[])]
         else: raise AssertionError(path)
         return {'items':rows,'total':len(rows),'page':1,'page_size':100}
     def put(self,path,payload):

@@ -37,7 +37,7 @@ func beginUserModelDispatch(ctx context.Context, c *gin.Context) (context.Contex
 		}
 	}
 }
-func observeUserModelDispatch(ctx context.Context, before, after []byte) {
+func observeUserModelDispatch(ctx context.Context, before, after []byte, level string) {
 	original := gjson.GetBytes(before, "model").String()
 	actual := gjson.GetBytes(after, "model").String()
 	if actual == "" {
@@ -46,7 +46,12 @@ func observeUserModelDispatch(ctx context.Context, before, after []byte) {
 	if observation, ok := ctx.Value(userModelDispatchKey{}).(*userModelDispatchObservation); ok {
 		observation.mu.Lock()
 		observation.model = actual
-		observation.rewritten = original != actual
+		// Earlier protocol/turn normalization may already have applied the cap.
+		// Restricted tier billing must still use the dispatched model, not fall
+		// back to the original higher-tier request. Non-GPT billing is untouched.
+		restrictedTier := (level == "terra" || level == "luna") &&
+			(actual == "gpt-5.6-terra" || actual == "gpt-6-luna" || actual == "gpt-5.6-luna")
+		observation.rewritten = original != actual || restrictedTier
 		observation.mu.Unlock()
 	}
 }

@@ -78,7 +78,7 @@ func TestIndependentPolicyFinalGateMetadata(t *testing.T) {
 			pool := newOpenAIWSConnPool(cfg)
 			defer pool.Close()
 			svc := &OpenAIGatewayService{cfg: cfg, settingService: settings, httpUpstream: &policyRealHTTPUpstream{}, cache: &stubGatewayCache{}, openaiWSResolver: NewOpenAIWSProtocolResolver(cfg), toolCorrector: NewCodexToolCorrector(), openaiWSPool: pool}
-			account := &Account{ID: 901, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Credentials: map[string]any{"api_key": "stub", "base_url": upstream.URL, "model_mapping": map[string]any{"gpt-5.6-terra": "gpt-6-astra", "gpt-5.6-luna": "gpt-5.6-luna", "gpt-6-astra": "gpt-6-astra"}}, Extra: map[string]any{"responses_websockets_v2_enabled": true, "openai_apikey_responses_websockets_v2_mode": mode}}
+			account := &Account{ID: 901, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Credentials: map[string]any{"api_key": "stub", "base_url": upstream.URL, "model_mapping": map[string]any{"gpt-5.6-terra": "gpt-6-astra", "gpt-6-luna": "gpt-6-astra", "gpt-5.6-luna": "gpt-5.6-luna", "gpt-6-astra": "gpt-6-astra"}}, Extra: map[string]any{"responses_websockets_v2_enabled": true, "openai_apikey_responses_websockets_v2_mode": mode}}
 			ended := make(chan error, 1)
 			gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				conn, e := coderws.Accept(w, r, nil)
@@ -105,24 +105,37 @@ func TestIndependentPolicyFinalGateMetadata(t *testing.T) {
 			client, _, err := coderws.Dial(ctx, "ws"+strings.TrimPrefix(gateway.URL, "http"), nil)
 			require.NoError(t, err)
 			defer client.CloseNow()
-			for i, level := range []string{"full", "terra", "luna", "full"} {
+			for i, level := range []string{"full", "terra", "luna", "full", "luna", "luna", "terra"} {
 				_, err = settings.SetUserOpenAIModelPolicy(ctx, 17, level)
 				require.NoError(t, err)
 				modelField := `,"model":"openai/GPT-6"`
 				if i == 2 {
 					modelField = ""
 				} // omitted subsequent model must not retain old cap
+				if i == 4 {
+					modelField = `,"model":"gpt-5.6-luna"`
+				}
+				if i >= 5 {
+					modelField = `,"model":"openai/GPT_6_LUNA-high"`
+				}
 				require.NoError(t, client.Write(ctx, coderws.MessageText, []byte(`{"type":"response.create","input":"hi"`+modelField+`}`)))
 				_, event, e := client.Read(ctx)
 				require.NoError(t, e, string(event))
 				require.Equal(t, "response.completed", gjson.GetBytes(event, "type").String(), string(event))
-				want := "gpt-5.6-luna"
+				want := "gpt-6-luna"
 				if i > 0 {
 					if level == "full" {
 						want = "gpt-6-astra"
 					} else {
-						want = "gpt-5.6-" + level
+						want = map[string]string{"terra": "gpt-5.6-terra", "luna": "gpt-6-luna"}[level]
 					}
+				}
+				if i == 4 {
+					want = "gpt-5.6-luna"
+				}
+				// Explicit Luna aliases stay below Terra on the existing connection.
+				if i >= 5 {
+					want = "gpt-6-luna"
 				}
 				select {
 				case got := <-models:
@@ -131,6 +144,13 @@ func TestIndependentPolicyFinalGateMetadata(t *testing.T) {
 					require.Equal(t, got, result.UpstreamModel, "final dispatch metadata must match model actually sent")
 					if i == 0 {
 						require.Equal(t, got, result.BillingModel)
+					}
+					billingModel := result.BillingModel
+					if billingModel == "" {
+						billingModel = forwardResultBillingModel(result.Model, result.UpstreamModel)
+					}
+					if level != "full" || i == 0 {
+						require.Equal(t, got, billingModel, "effective usage billing model for every restricted turn")
 					}
 				case <-ctx.Done():
 					t.Fatal(ctx.Err())
@@ -221,7 +241,7 @@ func testOpenAIUserModelPolicyFinalDispatchFailure(t *testing.T, mode string, fa
 		ID: 901, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1,
 		Credentials: map[string]any{
 			"api_key": "stub", "base_url": upstream.URL,
-			"model_mapping":              map[string]any{"gpt-6-astra": "gpt-6-astra", "gpt-5.6-luna": "gpt-5.6-luna"},
+			"model_mapping":              map[string]any{"gpt-6-astra": "gpt-6-astra", "gpt-6-luna": "gpt-6-luna"},
 			"temp_unschedulable_enabled": true,
 			"temp_unschedulable_rules": []any{map[string]any{
 				"error_code": float64(statusCode), "keywords": []any{keyword}, "duration_minutes": float64(1),
@@ -264,7 +284,7 @@ func testOpenAIUserModelPolicyFinalDispatchFailure(t *testing.T, mode string, fa
 
 	select {
 	case got := <-sentModels:
-		require.Equal(t, "gpt-5.6-luna", got)
+		require.Equal(t, "gpt-6-luna", got)
 	case <-ctx.Done():
 		t.Fatal(ctx.Err())
 	}
@@ -282,11 +302,11 @@ func testOpenAIUserModelPolicyFinalDispatchFailure(t *testing.T, mode string, fa
 		keys := repo.recordedModelKeys()
 		require.NotEmpty(t, keys)
 		for _, key := range keys {
-			require.Equal(t, "gpt-5.6-luna", key, "failure-side account state must use the model actually dispatched")
+			require.Equal(t, "gpt-6-luna", key, "failure-side account state must use the model actually dispatched")
 		}
 		opsModel, ok := outcome.c.Get(OpsUpstreamModelKey)
 		require.True(t, ok)
-		require.Equal(t, "gpt-5.6-luna", opsModel)
+		require.Equal(t, "gpt-6-luna", opsModel)
 	case <-ctx.Done():
 		t.Fatal(ctx.Err())
 	}
