@@ -16,16 +16,22 @@ class ZeroRecoveryTests(unittest.TestCase):
                 self.assertEqual(nxt['level'], 'luna')
                 self.assertEqual(nxt['low'], 1)
                 self.assertEqual(nxt['low_windows'], [c.window_evidence(101, 0)])
-                self.assertEqual(c.decide(nxt, 102, 0)['level'], 'full')
+                for hour in range(102, 109):
+                    nxt = c.decide(nxt, hour, 0)
+                self.assertEqual(nxt['level'], 'full')
 
     def test_proven_zero_counts_without_trusting_legacy_counter(self):
         state = {'level': 'terra', 'last': 100, 'low': 0,
                  'low_windows': [c.window_evidence(100, 0)]}
-        self.assertEqual(c.decide(state, 101, 0)['level'], 'full')
+        self.assertEqual(c.decide(state, 101, 0)['low'], 2)
+        recovered = state
+        for hour in range(101, 108):
+            recovered = c.decide(recovered, hour, 0)
+        self.assertEqual(recovered['level'], 'full')
         state['recovery_from_hour'] = 101
         self.assertEqual(c.decide(state, 101, 0)['level'], 'terra')
 
-    def test_pending_recovery_requires_two_zero_windows_before_any_write(self):
+    def test_pending_recovery_requires_eight_zero_windows_before_any_write(self):
         import tempfile
         from test_controller import FakeAPI
         for evidence in ([], [c.window_evidence(99, None), c.window_evidence(100, 0)],
@@ -70,7 +76,9 @@ class ZeroRecoveryTests(unittest.TestCase):
         for response_lost in (False, True):
             with self.subTest(response_lost=response_lost), tempfile.TemporaryDirectory() as d:
                 store = c.Store(d); api = FakeAPI(); api.level = 'luna'
-                first = c.decide({'level': 'luna', 'last': 98}, 99, 0)
+                first = {'level': 'luna', 'last': 92}
+                for hour in range(93, 100):
+                    first = c.decide(first, hour, 0)
                 store.save({'version': 1, 'users': {'9': first}})
                 doc = {'hour': 100, 'all_rows': 0, 'openai_rows': 0,
                        'unknown_groups': 0, 'invalid_tokens': 0, 'users': []}
@@ -89,7 +97,7 @@ class ZeroRecoveryTests(unittest.TestCase):
                 self.assertEqual(len(api.writes), 1)
                 self.assertEqual(summary['transitions'], pending['transitions'])
                 self.assertEqual(summary['targets'][0]['low_streak'],
-                                 [c.window_evidence(99, 0), c.window_evidence(100, 0)])
+                                 [c.window_evidence(h, 0) for h in range(93, 101)])
                 self.assertNotIn('pending', store.load())
                 self.assertEqual(c.run(api, store, 100, lambda h: doc, apply=True)['targets'], [])
                 self.assertEqual(len(api.writes), 1)
@@ -107,7 +115,9 @@ class ZeroRecoveryTests(unittest.TestCase):
                     gap = c.decide(first, 104, 0)
                     self.assertEqual(gap['level'], level)
                     self.assertEqual(gap['low_windows'], [c.window_evidence(104, 0)])
-                    self.assertEqual(c.decide(gap, 105, 0)['level'], 'full')
+                    for hour in range(105, 112):
+                        gap = c.decide(gap, hour, 0)
+                    self.assertEqual(gap['level'], 'full')
 
     def test_migration_preserves_restrictions_and_already_full_users(self):
         import tempfile
@@ -134,4 +144,6 @@ class ZeroRecoveryTests(unittest.TestCase):
                 self.assertEqual(positive['low_windows'], [])
                 restart = c.decide(positive, 102, 0)
                 self.assertEqual(restart['level'], level)
-                self.assertEqual(c.decide(restart, 103, 0)['level'], 'full')
+                for hour in range(103, 110):
+                    restart = c.decide(restart, hour, 0)
+                self.assertEqual(restart['level'], 'full')

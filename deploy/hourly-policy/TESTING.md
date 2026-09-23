@@ -1,5 +1,8 @@
 # Verification record
 
+The earlier sections below record the original two-hour implementation. The
+current eight-hour upgrade verification is recorded at the end of this file.
+
 All commands were run with the working directory `deploy/hourly-policy`.
 Only local tests ran; no deployment, production API calls, state changes or
 schedule changes were performed.
@@ -72,3 +75,40 @@ The checked-in workflows were inspected:
 No checked-in feature-branch push deployment job was found. This is a review of
 the repository workflow files, not a claim about external webhooks or deployment
 systems outside the repository. No push or workflow dispatch was performed.
+
+## Eight-hour upgrade (current)
+
+Source baseline: `cd997787d87624ed71be8447082c3e160eb9d387`; independent branch
+`feat/hourly-policy-eight-zero-hours`. Baseline: **45 tests passed**.
+
+Observed narrow RED → GREEN slices:
+
+1. Seven-versus-eight test: RED on both restricted levels because the second
+   zero hour recovered early. Carry the canonical contiguous suffix (up to seven
+   prior windows) and recover on the eighth. GREEN: 1 focused test.
+2. Journal boundary: RED in four old-two-window scenarios (validation reached
+   policy reads instead of rejecting evidence), while valid eight-window pending
+   recovery raised the old validator's PolicyError. Require exactly eight windows
+   before any journal save or policy mutation. GREEN: 3 focused tests.
+3. Canonical types: RED for false/float zero totals and float hours being accepted
+   as canonical evidence via Python numeric equality. Added strict integer checks
+   shared by carryover and commit validation. GREEN: 4 focused tests.
+4. Updated bootstrap fixture to eight windows: RED on the obsolete transition
+   reason. Updated reason to `eight_consecutive_hours_eq_0`. GREEN: focused test.
+
+Retained recovery fixtures now supply eight real contiguous windows. Added
+regression coverage for seven-hour positive resets, gaps, duplicate/older hours,
+verified migration suffixes, guard boundaries, malformed evidence at every
+position, old-two-window pending rejection before all writes, and valid-eight
+pending resume both before/after a lost response. Existing threshold/sticky,
+cache-token aggregation, key handling and compact cron output tests still pass.
+
+Final commands (from this directory):
+
+- `python3 -m unittest -v`: **54 tests passed**.
+- `python3 -m compileall -q .`: passed.
+- `git diff --check`: passed.
+
+No commit, push, deployment, live-state access, remote API call or cron change
+was performed. Only local temporary test stores, fake APIs, loopback fixtures
+and bounded local subprocesses were exercised. Parent review is still required.

@@ -15,7 +15,7 @@ validation.
 
 - More than 20,000,000 tokens: `terra` (an existing `luna` stays `luna`).
 - More than 50,000,000 tokens: `luna`.
-- Recovery from `terra` or `luna`: **two consecutive complete hourly windows,
+- Recovery from `terra` or `luna`: **eight consecutive complete hourly windows,
   each with exactly zero OpenAI tokens**, then `full` (all models).
 - Any positive usage, even one token, clears the recovery streak.
 - Skipped hours restart the streak; processing an hour again cannot advance it.
@@ -26,22 +26,34 @@ validation.
 
 State remains version 1 for compatibility. The legacy names `low` and
 `low_windows` are retained, but the count is not trusted: old counts may represent
-nonzero usage below the former threshold. Only explicit zero-token evidence for
-the immediately preceding hour, with matching complete-window timestamps and
-within the recovery guard, can count. Missing, legacy/null, nonzero or mismatched
-evidence starts a new one-window streak without lifting restrictions. Existing
-`full` users are not reset.
+nonzero usage below the former threshold. Only the verified contiguous suffix of
+explicit canonical zero-token evidence ending at the immediately preceding hour
+can count. Scan backward through at most seven prior windows, stopping at the
+first missing, nonzero, malformed, noncontiguous or pre-guard window. Hours and
+token totals must be integers (not booleans or floats), with exact UTC complete-
+window timestamps and no extra fields. Append the current complete zero window;
+never synthesize missing history. A missing/invalid final prior window or a gap
+starts a new one-window streak. A valid suffix after an invalid older window can
+still count. `low` is derived from evidence, never trusted as input. Normally the
+old two-hour controller retained at most one zero window for restricted users:
+that one may carry forward, but it does not imply any earlier zero hours.
+Existing `full` users are not reset by this migration; normal high-usage rules
+still apply. State is migrated lazily while processing each new hour, with no
+bulk rewrite or historical re-query.
 
 Before any write in a plan, every `full` operation (including journal retries)
-must carry two canonical contiguous zero windows in its planned user state,
+must carry exactly eight canonical contiguous zero windows in its planned user state,
 ending at the planned hour and respecting `recovery_from_hour`. Invalid legacy
 recovery intents fail closed with `invalid recovery evidence`; the journal is
 left untouched for **manual reconciliation**. This also applies if the remote
 write already happened before a lost response. Do not delete the journal or
 reset users as an automatic migration. Stale-hour journals remain blocked.
-Valid zero-evidence intents can resume without duplicate writes. Transition
-evidence retains both hours; new recovery reasons are
-`two_consecutive_hours_eq_0`.
+Valid eight-window zero-evidence intents can resume without duplicate writes.
+Old two-window `full` intents remain blocked for operator reconciliation, even
+if the remote policy is already `full`; do not expand them using assumed hours.
+Recovery validation precedes any journal save and any policy mutation in the
+entire write set. Transition evidence retains all eight hours; new recovery
+reasons are `eight_consecutive_hours_eq_0`.
 
 ## Configuration and installation assumptions
 

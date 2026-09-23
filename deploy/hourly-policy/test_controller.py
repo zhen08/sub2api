@@ -21,10 +21,15 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(low['level'],'luna')
         self.assertEqual(c.decide(low,101,0),low)
         self.assertEqual(c.decide(low,103,0)['level'],'luna')
-        self.assertEqual(c.decide(low,102,0)['level'],'full')
+        recovered = low
+        for hour in range(102, 109):
+            recovered = c.decide(recovered, hour, 0)
+        self.assertEqual(recovered['level'], 'full')
         self.assertEqual(c.decide(low,102,10_000_000)['level'],'luna')
         bootstrap=c.decide({'level':'terra','last':99,'low':0},100,0)
-        self.assertEqual(c.decide(bootstrap,101,0)['level'],'full')
+        for hour in range(101, 108):
+            bootstrap = c.decide(bootstrap, hour, 0)
+        self.assertEqual(bootstrap['level'], 'full')
         self.assertEqual(c.decide(s,99,0),s)
 
     def test_pagination_all_pages_and_fail_closed(self):
@@ -41,17 +46,19 @@ class PolicyTests(unittest.TestCase):
         p=c.plan({},100,{9:0},keys,{9:'original'})
         self.assertEqual(p['users']['9']['level'],'terra')
         self.assertEqual(p['ops'],[{'id':9,'from':'original','to':'terra'}])
-        p2=c.plan(p['users'],101,{9:0},keys,{9:'terra'})
+        p2 = p
+        for hour in range(101, 108):
+            p2=c.plan(p2['users'],hour,{9:0},keys,{9:'terra'})
         self.assertEqual(p2['ops'],[{'id':9,'from':'terra','to':'full'}])
-        p3=c.plan(p2['users'],102,{9:51_000_000},keys,{9:'full'})
+        p3=c.plan(p2['users'],108,{9:51_000_000},keys,{9:'full'})
         self.assertEqual(p3['ops'],[{'id':9,'from':'full','to':'luna'}])
-        p4=c.plan(p3['users'],102,{9:0},keys+[{'id':3,'user_id':9,'group_id':6}],{9:'luna'})
+        p4=c.plan(p3['users'],108,{9:0},keys+[{'id':3,'user_id':9,'group_id':6}],{9:'luna'})
         self.assertEqual(p4['users'],p3['users'])
         self.assertEqual(p4['ops'],[])
         untouched=c.plan({},100,{9:0},[{'id':1,'user_id':9,'group_id':6}],{9:'original'})
         self.assertEqual(untouched['ops'],[])
         with self.assertRaises(c.PolicyError): c.plan({},100,{},keys,{9:'luna'})
-        with self.assertRaises(c.PolicyError): c.plan(p3['users'],103,{},keys,{9:'original'})
+        with self.assertRaises(c.PolicyError): c.plan(p3['users'],109,{},keys,{9:'original'})
 
     def test_durable_intent_partial_failure_retry_and_drift(self):
         self.assertTrue(hasattr(c,'commit_plan'), 'transaction missing')
@@ -99,7 +106,9 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(partial['low'],0)
         low=c.decide(partial,102,0)
         self.assertEqual(low['low'],1)
-        self.assertEqual(c.decide(low,103,0)['level'],'full')
+        for hour in range(103, 110):
+            low = c.decide(low, hour, 0)
+        self.assertEqual(low['level'], 'full')
 
     def test_inventory_no_secrets_disabled_keys_and_policy_adapter(self):
         self.assertTrue(hasattr(c,'inventory'), 'inventory missing')
@@ -153,8 +162,10 @@ class PolicyTests(unittest.TestCase):
             bad=dict(doc,unknown_groups=1)
             with self.assertRaises(c.PolicyError): c.run(api,store,101,lambda h:bad,apply=True)
             self.assertEqual(len(api.writes),1)
-            doc['hour']=101
-            c.run(api,store,101,lambda h:doc,apply=True)
+            for hour in range(101, 108):
+                doc['hour']=hour
+                c.run(api,store,hour,lambda h:doc,apply=True)
+                self.assertEqual(api.level, 'terra' if hour < 107 else 'full')
             self.assertEqual(api.level,'full')
             self.assertEqual(len(api.writes),2)
 
@@ -174,7 +185,9 @@ class PolicyTests(unittest.TestCase):
         self.assertEqual(p['users']['9']['recovery_from_hour'],101)
         later=c.plan(p['users'],101,{9:0},[],{9:'luna'})
         self.assertEqual(later['users']['9']['low'],1)
-        recovered=c.plan(later['users'],102,{9:0},[],{9:'luna'})
+        recovered = later
+        for hour in range(102, 109):
+            recovered=c.plan(recovered['users'],hour,{9:0},[],{9:'luna'})
         self.assertEqual(recovered['ops'],[{'id':9,'from':'luna','to':'full'}])
         p=c.plan({},100,{9:21_000_000},[{'id':1,'user_id':9,'group_id':99}],{9:'original'})
         self.assertEqual(p['ops'][0]['to'],'terra')
