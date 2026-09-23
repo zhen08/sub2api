@@ -1,0 +1,47 @@
+{
+  "channels": [
+    {
+      "account_stats_pricing_rules": [],
+      "apply_pricing_to_account_stats": false,
+      "billing_model_source": "channel_mapped",
+      "features": "",
+      "features_config": {},
+      "group_ids": [
+        8
+      ],
+      "id": 1,
+      "model_mapping": {
+        "openai": {
+          "codex-auto-review": "gpt-6-luna",
+          "gpt-5.5": "gpt-6-luna",
+          "gpt-5.6-sol": "gpt-5.6-terra"
+        }
+      },
+      "model_pricing": [],
+      "restrict_models": false,
+      "status": "active"
+    },
+    {
+      "account_stats_pricing_rules": [],
+      "apply_pricing_to_account_stats": false,
+      "billing_model_source": "channel_mapped",
+      "features": "",
+      "features_config": {},
+      "group_ids": [
+        6
+      ],
+      "id": 2,
+      "model_mapping": {
+        "openai": {
+          "codex-auto-review": "gpt-6-luna",
+          "gpt-5.5": "gpt-6-luna"
+        }
+      },
+      "model_pricing": [],
+      "restrict_models": false,
+      "status": "active"
+    }
+  ],
+  "collected_at": "2026-09-23T02:39:56.412292+00:00",
+  "source": "GET /api/v1/admin/channels; exact guard field projection"
+}

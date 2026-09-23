@@ -340,12 +340,16 @@ def inventory(api):
     channels = pages(api.get, '/channels')
     for gid, cid in ((6,2),(8,1)):
         found = [v for v in channels if gid in v.get('group_ids', [])]
-        expected = {'codex-auto-review':'gpt-5.6-luna'}
-        if gid == 8: expected['gpt-5.6-sol'] = 'gpt-5.6-terra'
+        legacy = {'codex-auto-review':'gpt-5.6-luna'}
+        current = {'codex-auto-review':'gpt-6-luna', 'gpt-5.5':'gpt-6-luna'}
+        if gid == 8:
+            legacy['gpt-5.6-sol'] = current['gpt-5.6-sol'] = 'gpt-5.6-terra'
+        # Accept only complete reviewed mappings, never subsets or arbitrary targets.
+        accepted_mappings = ({'openai':legacy}, {'openai':current})
         if len(found) != 1:
             raise PolicyError('source channel membership drift')
         ch = found[0]
-        if (ch['id'] != cid or ch['group_ids'] != [gid] or ch.get('model_mapping') != {'openai':expected}
+        if (ch['id'] != cid or ch['group_ids'] != [gid] or ch.get('model_mapping') not in accepted_mappings
             or ch.get('status') != 'active' or ch.get('restrict_models') is not False
             or ch.get('billing_model_source') != 'channel_mapped'
             or any(ch.get(k) for k in ('features','features_config','model_pricing','apply_pricing_to_account_stats','account_stats_pricing_rules'))):
