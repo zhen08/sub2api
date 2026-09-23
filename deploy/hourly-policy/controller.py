@@ -45,6 +45,13 @@ def window_evidence(hour, tokens):
             'hour_end':dt.datetime.fromtimestamp((hour+1)*3600,dt.timezone.utc).isoformat()}
 
 
+def canonical_zero_window(evidence, hour):
+    return (isinstance(evidence, dict)
+            and type(evidence.get('hour')) is int
+            and type(evidence.get('hourly_tokens')) is int
+            and evidence == window_evidence(hour, 0))
+
+
 def decide(state, hour, tokens):
     if hour <= state.get('last', -1):
         return dict(state)
@@ -59,14 +66,16 @@ def decide(state, hour, tokens):
         # Legacy low counts may include nonzero usage: evidence, not the
         # counter, is authoritative. Never synthesize missing evidence.
         prior = state.get('low_windows')
-        if (state.get('last') == hour - 1
-                and hour - 1 >= state.get('recovery_from_hour', 0)
-                and isinstance(prior, list) and prior
-                and prior[-1] == window_evidence(hour - 1, 0)):
-            windows = [prior[-1]]
+        if state.get('last') == hour - 1 and isinstance(prior, list):
+            for evidence in reversed(prior[-7:]):
+                previous_hour = hour - len(windows) - 1
+                if (previous_hour < state.get('recovery_from_hour', 0)
+                        or not canonical_zero_window(evidence, previous_hour)):
+                    break
+                windows.insert(0, evidence)
         windows = windows + [window_evidence(hour, tokens)]
         low = len(windows)
-        if low == 2:
+        if low == 8:
             level, low = 'full', 0
     result = dict(state, level=level, last=hour, low=low, low_windows=windows)
     return result
@@ -96,7 +105,7 @@ def plan(users, hour, totals, keys, policies):
             tokens = totals.get(int(uid), 0)
             reason = ('tokens_gt_50000000' if tokens > 50_000_000 else
                       'tokens_gt_20000000' if tokens > 20_000_000 else
-                      'two_consecutive_hours_eq_0' if level == 'full' else
+                      'eight_consecutive_hours_eq_0' if level == 'full' else
                       'bootstrap_group_8')
             transitions.append(dict(window_evidence(hour,tokens), user_id=int(uid),
                 **{'from':current,'to':level,'reason':reason,'low_streak':nxt['low_windows']}))
@@ -155,11 +164,13 @@ def commit_plan(store, planned, read_policy, update_policy, guard=lambda: None):
         if op['to'] == 'full':
             hour = planned['hour']
             user = planned['users'].get(str(op['id']), {})
+            evidence = user.get('low_windows')
             if (op['from'] not in ('terra', 'luna')
                     or user.get('level') != 'full' or user.get('last') != hour
-                    or hour - 1 < user.get('recovery_from_hour', 0)
-                    or user.get('low_windows') != [window_evidence(hour - 1, 0),
-                                                   window_evidence(hour, 0)]):
+                    or hour - 7 < user.get('recovery_from_hour', 0)
+                    or not isinstance(evidence, list) or len(evidence) != 8
+                    or not all(canonical_zero_window(v, h) for v, h in
+                               zip(evidence, range(hour - 7, hour + 1)))):
                 raise PolicyError('invalid recovery evidence: manual reconciliation required; no writes')
     # Validate the ENTIRE write set before the first mutation.
     for op in planned['ops']:
@@ -329,12 +340,16 @@ def inventory(api):
     channels = pages(api.get, '/channels')
     for gid, cid in ((6,2),(8,1)):
         found = [v for v in channels if gid in v.get('group_ids', [])]
-        expected = {'codex-auto-review':'gpt-5.6-luna'}
-        if gid == 8: expected['gpt-5.6-sol'] = 'gpt-5.6-terra'
+        legacy = {'codex-auto-review':'gpt-5.6-luna'}
+        current = {'codex-auto-review':'gpt-6-luna', 'gpt-5.5':'gpt-6-luna'}
+        if gid == 8:
+            legacy['gpt-5.6-sol'] = current['gpt-5.6-sol'] = 'gpt-5.6-terra'
+        # Accept only complete reviewed mappings, never subsets or arbitrary targets.
+        accepted_mappings = ({'openai':legacy}, {'openai':current})
         if len(found) != 1:
             raise PolicyError('source channel membership drift')
         ch = found[0]
-        if (ch['id'] != cid or ch['group_ids'] != [gid] or ch.get('model_mapping') != {'openai':expected}
+        if (ch['id'] != cid or ch['group_ids'] != [gid] or ch.get('model_mapping') not in accepted_mappings
             or ch.get('status') != 'active' or ch.get('restrict_models') is not False
             or ch.get('billing_model_source') != 'channel_mapped'
             or any(ch.get(k) for k in ('features','features_config','model_pricing','apply_pricing_to_account_stats','account_stats_pricing_rules'))):

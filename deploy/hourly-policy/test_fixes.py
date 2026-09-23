@@ -55,15 +55,17 @@ class FixTests(unittest.TestCase):
         self.assertEqual(json.loads(out.getvalue().splitlines()[0])['error'], 'unexpected_stderr')
         self.assertNotIn('DUMMY-SECRET', out.getvalue())
 
-    def test_bootstrap_and_two_zero_windows_evidence(self):
+    def test_bootstrap_and_eight_zero_windows_evidence(self):
         keys = [{'id':1,'user_id':9,'group_id':8}]
         bootstrap = c.plan({}, 100, {9:0}, keys, {9:'original'})
         self.assertEqual(bootstrap['transitions'][0]['reason'], 'bootstrap_group_8')
-        recovered = c.plan(bootstrap['users'], 101, {9:0}, keys, {9:'terra'})
+        recovered = bootstrap
+        for hour in range(101, 108):
+            recovered = c.plan(recovered['users'], hour, {9:0}, keys, {9:'terra'})
         evidence = recovered['transitions'][0]
-        self.assertEqual(evidence['reason'], 'two_consecutive_hours_eq_0')
-        self.assertEqual([v['hour'] for v in evidence['low_streak']], [100,101])
-        self.assertEqual([v['hourly_tokens'] for v in evidence['low_streak']], [0,0])
+        self.assertEqual(evidence['reason'], 'eight_consecutive_hours_eq_0')
+        self.assertEqual([v['hour'] for v in evidence['low_streak']], list(range(100, 108)))
+        self.assertEqual([v['hourly_tokens'] for v in evidence['low_streak']], [0]*8)
         self.assertTrue(all(v['hour_start'] and v['hour_end'] for v in evidence['low_streak']))
         # A gap/nonzero window must not retain misleading recovery evidence.
         gap = c.plan(bootstrap['users'], 102, {9:0}, keys, {9:'terra'})
