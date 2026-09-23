@@ -81,7 +81,7 @@ func TestOpenAIUserModelPolicyExistingWebSocket(t *testing.T) {
 			pool := newOpenAIWSConnPool(cfg)
 			defer pool.Close()
 			svc := &OpenAIGatewayService{cfg: cfg, settingService: settings, httpUpstream: &policyRealHTTPUpstream{}, cache: &stubGatewayCache{}, openaiWSResolver: NewOpenAIWSProtocolResolver(cfg), toolCorrector: NewCodexToolCorrector(), openaiWSPool: pool}
-			account := &Account{ID: 901, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Credentials: map[string]any{"api_key": "stub", "base_url": upstream.URL, "model_mapping": map[string]any{"gpt-5.6-terra": "gpt-6-astra", "gpt-5.6-luna": "gpt-5.6-luna", "gpt-6-astra": "gpt-6-astra"}}, Extra: map[string]any{"responses_websockets_v2_enabled": true, "openai_apikey_responses_websockets_v2_mode": mode}}
+			account := &Account{ID: 901, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Credentials: map[string]any{"api_key": "stub", "base_url": upstream.URL, "model_mapping": map[string]any{"gpt-5.6-terra": "gpt-6-astra", "gpt-6-luna": "gpt-6-astra", "gpt-5.6-luna": "gpt-5.6-luna", "gpt-6-astra": "gpt-6-astra"}}, Extra: map[string]any{"responses_websockets_v2_enabled": true, "openai_apikey_responses_websockets_v2_mode": mode}}
 			ended := make(chan error, 1)
 			gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				conn, e := coderws.Accept(w, r, nil)
@@ -108,20 +108,33 @@ func TestOpenAIUserModelPolicyExistingWebSocket(t *testing.T) {
 			client, _, err := coderws.Dial(ctx, "ws"+strings.TrimPrefix(gateway.URL, "http"), nil)
 			require.NoError(t, err)
 			defer client.CloseNow()
-			for i, level := range []string{"full", "terra", "luna", "full"} {
+			for i, level := range []string{"full", "terra", "luna", "full", "luna", "luna", "terra"} {
 				_, err = settings.SetUserOpenAIModelPolicy(ctx, 17, level)
 				require.NoError(t, err)
 				modelField := `,"model":"openai/GPT-6"`
 				if i == 2 {
 					modelField = ""
 				} // omitted subsequent model must not retain old cap
+				if i == 4 {
+					modelField = `,"model":"gpt-5.6-luna"`
+				}
+				if i >= 5 {
+					modelField = `,"model":"openai/GPT_6_LUNA-high"`
+				}
 				require.NoError(t, client.Write(ctx, coderws.MessageText, []byte(`{"type":"response.create","input":"hi"`+modelField+`}`)))
 				_, event, e := client.Read(ctx)
 				require.NoError(t, e, string(event))
 				require.Equal(t, "response.completed", gjson.GetBytes(event, "type").String(), string(event))
 				want := "gpt-6-astra"
 				if level != "full" {
-					want = "gpt-5.6-" + level
+					want = map[string]string{"terra": "gpt-5.6-terra", "luna": "gpt-6-luna"}[level]
+				}
+				if i == 4 {
+					want = "gpt-5.6-luna"
+				}
+				// Explicit Luna aliases stay below Terra on the existing connection.
+				if i >= 5 {
+					want = "gpt-6-luna"
 				}
 				select {
 				case got := <-models:
@@ -156,9 +169,9 @@ func TestOpenAIUserModelPolicyPooledConnectionUserIsolation(t *testing.T) {
 		require.NoError(t, s.writeUserPolicyWSJSON(ctx, lease, account, map[string]any{"type": "response.create", "model": "gpt-6-astra"}))
 	}
 	require.Len(t, physical.writes, 3)
-	require.Equal(t, "gpt-5.6-luna", physical.writes[0]["model"])
+	require.Equal(t, "gpt-6-luna", physical.writes[0]["model"])
 	require.Equal(t, "gpt-6-astra", physical.writes[1]["model"])
-	require.Equal(t, "gpt-5.6-luna", physical.writes[2]["model"])
+	require.Equal(t, "gpt-6-luna", physical.writes[2]["model"])
 	repo.mu.Lock()
 	repo.err = fmt.Errorf("offline")
 	repo.mu.Unlock()

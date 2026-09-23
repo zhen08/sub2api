@@ -65,7 +65,7 @@ func TestOpenAIUserModelPolicyHTTPIngress(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	for _, path := range []string{"responses", "chat/completions", "messages"} {
 		t.Run(path, func(t *testing.T) {
-			repo := openAIImagesFailoverAccountRepo{accounts: []service.Account{{ID: 1, Platform: service.PlatformOpenAI, Type: service.AccountTypeOAuth, Status: service.StatusActive, Schedulable: true, Credentials: map[string]any{"access_token": "stub-token", "model_mapping": map[string]any{"gpt-5.6-terra": "gpt-6-astra", "gpt-5.6-luna": "gpt-5.6-luna"}}}}}
+			repo := openAIImagesFailoverAccountRepo{accounts: []service.Account{{ID: 1, Platform: service.PlatformOpenAI, Type: service.AccountTypeOAuth, Status: service.StatusActive, Schedulable: true, Credentials: map[string]any{"access_token": "stub-token", "model_mapping": map[string]any{"gpt-5.6-terra": "gpt-6-astra", "gpt-6-luna": "gpt-6-astra"}}}}}
 			cfg := &config.Config{RunMode: config.RunModeSimple}
 			upstream := &userPolicyHandlerUpstream{}
 			settings := service.NewSettingService(&userPolicyHandlerSettings{values: map[string]string{}}, cfg)
@@ -98,9 +98,9 @@ func TestOpenAIUserModelPolicyHTTPIngress(t *testing.T) {
 				}
 				require.Equal(t, 200, rec.Code, rec.Body.String())
 				require.NotEmpty(t, upstream.models, rec.Body.String())
-				require.Equal(t, "gpt-5.6-"+level, upstream.models[len(upstream.models)-1])
+				require.Equal(t, map[string]string{"terra": "gpt-5.6-terra", "luna": "gpt-6-luna"}[level], upstream.models[len(upstream.models)-1])
 				actualModel, _ := c.Get(service.OpsUpstreamModelKey)
-				require.Equal(t, "gpt-5.6-"+level, actualModel, "audit metadata must match actual dispatch")
+				require.Equal(t, map[string]string{"terra": "gpt-5.6-terra", "luna": "gpt-6-luna"}[level], actualModel, "audit metadata must match actual dispatch")
 			}
 		})
 	}
@@ -130,8 +130,8 @@ func TestOpenAIUserModelPolicyIsolationAndRecovery(t *testing.T) {
 		user, key, group   int64
 		level, model, want string
 	}{
-		{17, 1, 6, "luna", "gpt-6-astra", "gpt-5.6-luna"},
-		{17, 999, 8, "luna", "gpt-6-astra", "gpt-5.6-luna"}, // new key/self group switch
+		{17, 1, 6, "luna", "gpt-6-astra", "gpt-6-luna"},
+		{17, 999, 8, "luna", "gpt-6-astra", "gpt-6-luna"}, // new key/self group switch
 		{18, 2, 6, "original", "gpt-5.6-sol", "gpt-5.6-terra"},
 		{17, 1, 6, "full", "gpt-5.6-sol", "gpt-5.6-sol"},
 		{17, 1, 6, "full", "codex-auto-review", "codex-auto-review"},
@@ -202,7 +202,7 @@ func TestOpenAIUserModelPolicyWebSocketHandler(t *testing.T) {
 		require.Equal(t, "response.completed", gjson.GetBytes(body, "type").String(), string(body))
 		want := "gpt-5.6-sol"
 		if level != "full" {
-			want = "gpt-5.6-" + level
+			want = map[string]string{"terra": "gpt-5.6-terra", "luna": "gpt-6-luna"}[level]
 		}
 		upstream.mu.Lock()
 		actual := upstream.models[len(upstream.models)-1]
