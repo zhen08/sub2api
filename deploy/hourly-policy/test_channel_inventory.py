@@ -29,6 +29,17 @@ class ChannelInventoryTests(unittest.TestCase):
         self.assertEqual(api.channels, before)
         self.assertEqual(api.writes, [])
 
+    def test_exact_latest_sol_configuration_accepted_without_writes(self):
+        api = ChannelAPI()
+        for ch in api.channels:
+            ch['model_mapping'] = {'openai': {
+                'codex-auto-review': 'gpt-6-luna', 'gpt-5.5': 'gpt-6-luna',
+                'gpt-5.6-sol': 'gpt-6-sol'}}
+        before = copy.deepcopy(api.channels)
+        self.assertEqual(c.inventory(api), c.inventory(FakeAPI()))
+        self.assertEqual(api.channels, before)
+        self.assertEqual(api.writes, [])
+
     def test_exact_legacy_configuration_remains_accepted(self):
         api = FakeAPI()
         self.assertEqual(c.inventory(api)['openai_key_count'], 2)
@@ -70,7 +81,7 @@ class ChannelInventoryTests(unittest.TestCase):
 
     def test_group_specific_sol_mapping_remains_exact(self):
         for index in range(2):
-            for target in ('gpt-6-luna', 'gpt-6-sol', None):
+            for target in ('gpt-6-luna', 'unknown-model', None):
                 with self.subTest(index=index, target=target):
                     api = ChannelAPI()
                     mapping = api.channels[index]['model_mapping']['openai']
@@ -83,6 +94,47 @@ class ChannelInventoryTests(unittest.TestCase):
                             mapping['gpt-5.6-sol'] = 'gpt-5.6-terra'
                     else:
                         mapping['gpt-5.6-sol'] = target
+                    self.assert_rejected(api)
+
+    def test_latest_mapping_rejects_unknown_partial_and_hybrid_aliases(self):
+        latest = {'codex-auto-review': 'gpt-6-luna', 'gpt-5.5': 'gpt-6-luna',
+                  'gpt-5.6-sol': 'gpt-6-sol'}
+        for index in range(2):
+            for alias in latest:
+                for target in (None, 'unknown-model', 'gpt-5.6-luna'):
+                    # Group 6 without sol is a complete previously reviewed mapping.
+                    if index == 1 and alias == 'gpt-5.6-sol' and target is None:
+                        continue
+                    with self.subTest(index=index, alias=alias, target=target):
+                        api = ChannelAPI()
+                        mapping = dict(latest)
+                        if target is None:
+                            del mapping[alias]
+                        else:
+                            mapping[alias] = target
+                        api.channels[index]['model_mapping'] = {'openai': mapping}
+                        self.assert_rejected(api)
+            for extra in ({'openai': dict(latest, unknown_alias='gpt-6-sol')},
+                          {'openai': latest, 'anthropic': {}}):
+                api = ChannelAPI()
+                api.channels[index]['model_mapping'] = extra
+                self.assert_rejected(api)
+
+    def test_latest_mapping_preserves_nonmapping_and_membership_guards(self):
+        changes = {'id': 99, 'group_ids': [8, 6], 'status': 'disabled',
+                   'restrict_models': True, 'billing_model_source': 'original',
+                   'features': 'unexpected', 'features_config': {'enabled': True},
+                   'model_pricing': [{}], 'apply_pricing_to_account_stats': True,
+                   'account_stats_pricing_rules': [{}]}
+        for index in range(2):
+            for field, value in changes.items():
+                with self.subTest(index=index, field=field):
+                    api = ChannelAPI()
+                    for ch in api.channels:
+                        ch['model_mapping'] = {'openai': {
+                            'codex-auto-review': 'gpt-6-luna', 'gpt-5.5': 'gpt-6-luna',
+                            'gpt-5.6-sol': 'gpt-6-sol'}}
+                    api.channels[index][field] = value
                     self.assert_rejected(api)
 
     def test_non_mapping_guards_remain_enforced(self):

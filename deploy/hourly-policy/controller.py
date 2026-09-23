@@ -344,8 +344,10 @@ def inventory(api):
         current = {'codex-auto-review':'gpt-6-luna', 'gpt-5.5':'gpt-6-luna'}
         if gid == 8:
             legacy['gpt-5.6-sol'] = current['gpt-5.6-sol'] = 'gpt-5.6-terra'
+        latest = {'codex-auto-review':'gpt-6-luna', 'gpt-5.5':'gpt-6-luna',
+                  'gpt-5.6-sol':'gpt-6-sol'}
         # Accept only complete reviewed mappings, never subsets or arbitrary targets.
-        accepted_mappings = ({'openai':legacy}, {'openai':current})
+        accepted_mappings = ({'openai':legacy}, {'openai':current}, {'openai':latest})
         if len(found) != 1:
             raise PolicyError('source channel membership drift')
         ch = found[0]

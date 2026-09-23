@@ -132,8 +132,18 @@ def main():
                 if result.stdout:
                     print(result.stdout.decode('utf-8'), end='')
                 return 0
-            print(json.dumps({'status':'error','error':'ssh_nonzero' if result.returncode else 'unexpected_stderr','exit_code':result.returncode,
-                              'attempt':attempt,'hour':hour}))
+            failure = {'status':'error','error':'ssh_nonzero' if result.returncode else 'unexpected_stderr',
+                       'exit_code':result.returncode,'attempt':attempt,'hour':hour}
+            if result.returncode == 1:
+                try:
+                    remote = json.loads(result.stdout)
+                except (ValueError, UnicodeError, RecursionError):
+                    remote = None
+                # Emit only this local static literal, never arbitrary remote data.
+                if (isinstance(remote, dict) and remote.get('status') == 'error'
+                        and remote.get('error') == 'source channel configuration drift'):
+                    failure['remote_error'] = 'source channel configuration drift'
+            print(json.dumps(failure))
         except ValueError:
             print(json.dumps({'status':'error','error':'invalid_ssh_configuration'}))
             return 1
