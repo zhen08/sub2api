@@ -29,7 +29,7 @@ class ChannelInventoryTests(unittest.TestCase):
         self.assertEqual(api.channels, before)
         self.assertEqual(api.writes, [])
 
-    def test_exact_legacy_configuration_remains_accepted(self):
+    def test_exact_required_configuration_remains_accepted(self):
         api = FakeAPI()
         self.assertEqual(c.inventory(api)['openai_key_count'], 2)
         self.assertEqual(api.writes, [])
@@ -68,19 +68,14 @@ class ChannelInventoryTests(unittest.TestCase):
                         del ch['model_mapping']
                     self.assert_rejected(api)
 
-    def test_group_specific_sol_mapping_remains_exact(self):
+    def test_sol_mapping_is_required_on_every_openai_source_channel(self):
         for index in range(2):
-            for target in ('gpt-6-luna', 'gpt-6-sol', None):
+            for target in ('gpt-6-luna', 'gpt-5.6-terra', None):
                 with self.subTest(index=index, target=target):
                     api = ChannelAPI()
                     mapping = api.channels[index]['model_mapping']['openai']
                     if target is None:
-                        # Remove the required group-8 rule; add an otherwise-valid
-                        # group-8 rule to group 6, where it is still forbidden.
-                        if api.channels[index]['group_ids'] == [8]:
-                            del mapping['gpt-5.6-sol']
-                        else:
-                            mapping['gpt-5.6-sol'] = 'gpt-5.6-terra'
+                        del mapping['gpt-5.6-sol']
                     else:
                         mapping['gpt-5.6-sol'] = target
                     self.assert_rejected(api)
