@@ -63,6 +63,11 @@ reasons are `eight_consecutive_hours_eq_0`.
   optionally prefixed with `user@`. No default destination or login is shipped.
   For IPv6, use an SSH-config alias.
 - `HOURLY_POLICY_SSH_PORT`: decimal port 1–65535, default `22`.
+- `HOURLY_POLICY_LOCAL_STATE_DIR`: optional **existing absolute local directory**
+  for sanitized retry evidence, e.g. `/home/zhen/Repo/aiproxy-hourly-policy/state`.
+  Provision it separately with owner-only permissions (`0700`), owned by the
+  runner. It is not the remote controller state directory. No directory is
+  automatically created, and there is no default or home-directory fallback.
 
 For example, `operator@policy.example.test` is a documentation placeholder, not
 an installed destination. Missing/invalid configuration fails before SSH starts,
@@ -85,7 +90,38 @@ than silently editing groups/channels/keys. Review these assumptions before any
 installation; the controller is not a universal auto-configurator.
 
 Successful cron transitions emit only `email`, `from`, `to`; no-change runs are
-silent. Diagnostics remain visible. State, dry-run output and operational logs
+silent, including successful retries. Failed-attempt diagnostics are buffered:
+success emits only the successful attempt's stdout; three failed attempts emit
+all sanitized attempt diagnostics followed by `retries_exhausted`. Hour/deadline
+guard exits retain prior attempt diagnostics followed by the guard error.
+The 900-second total budget, attempt bounds, pinned hour and process-group
+cleanup are unchanged.
+
+SSH diagnostics expose only static `ssh_error` codes: `timeout`, `refused`,
+`network_unreachable`, `auth_failed`, `host_key`, `connection_closed`, `unknown`.
+Classification examines at most the first 4096 stderr bytes in memory, across
+read chunks, while the existing combined output limit remains enforced. Raw
+stderr is neither returned nor printed nor persisted. Classification is a
+best-effort English-message heuristic, not proof of an underlying network cause;
+unrecognized, localized or prefix-truncated messages classify as `unknown`.
+
+When local state is configured, `last-retry-failure.json` retains the most recent
+failure-bearing run (recovered or terminal), at most three sanitized attempt
+records and 4096 bytes. It includes the pinned hour and outcome, not SSH host,
+credentials, remote stdout, stderr or transition emails. Clean first-attempt
+success leaves it intact. Replacement uses a private `0600` file and a directory
+descriptor; final-component directory symlinks are rejected and target-file
+symlinks are replaced, not followed. Root and the home directory itself are
+rejected. Use a trusted local filesystem and trusted parent directories.
+
+This record is optional, best-effort, and not a durable audit journal: missing,
+unsafe or unwritable directories do not change policy execution or notification
+output. One exclusive `.last-retry-failure.tmp` slot bounds temporary disk use;
+an interrupted writer can leave it behind. In that case recording is skipped
+until an operator verifies no writer is active and removes the stale slot.
+No automatic cleanup of another writer's slot is performed.
+
+State, dry-run output and operational logs
 can contain personal data and must never be committed.
 
 ## Local verification (no deployment)
