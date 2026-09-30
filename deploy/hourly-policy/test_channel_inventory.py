@@ -34,11 +34,19 @@ class ChannelInventoryTests(unittest.TestCase):
         for ch in api.channels:
             ch['model_mapping'] = {'openai': {
                 'codex-auto-review': 'gpt-6-luna', 'gpt-5.5': 'gpt-6-luna',
-                'gpt-5.6-sol': 'gpt-6-sol'}}
+                'gpt-5.6-sol': 'gpt-6.1-sol'}}
         before = copy.deepcopy(api.channels)
         self.assertEqual(c.inventory(api), c.inventory(FakeAPI()))
         self.assertEqual(api.channels, before)
         self.assertEqual(api.writes, [])
+
+    def test_each_channel_can_migrate_independently_without_writes(self):
+        for index in range(2):
+            with self.subTest(index=index):
+                api = ChannelAPI()
+                api.channels[index]['model_mapping']['openai']['gpt-5.6-sol'] = 'gpt-6.1-sol'
+                self.assertEqual(c.inventory(api), c.inventory(FakeAPI()))
+                self.assertEqual(api.writes, [])
 
     def test_exact_required_configuration_remains_accepted(self):
         api = FakeAPI()
@@ -93,13 +101,10 @@ class ChannelInventoryTests(unittest.TestCase):
 
     def test_latest_mapping_rejects_unknown_partial_and_hybrid_aliases(self):
         latest = {'codex-auto-review': 'gpt-6-luna', 'gpt-5.5': 'gpt-6-luna',
-                  'gpt-5.6-sol': 'gpt-6-sol'}
+                  'gpt-5.6-sol': 'gpt-6.1-sol'}
         for index in range(2):
             for alias in latest:
                 for target in (None, 'unknown-model', 'gpt-5.6-luna'):
-                    # Group 6 without sol is a complete previously reviewed mapping.
-                    if index == 1 and alias == 'gpt-5.6-sol' and target is None:
-                        continue
                     with self.subTest(index=index, alias=alias, target=target):
                         api = ChannelAPI()
                         mapping = dict(latest)
@@ -109,7 +114,7 @@ class ChannelInventoryTests(unittest.TestCase):
                             mapping[alias] = target
                         api.channels[index]['model_mapping'] = {'openai': mapping}
                         self.assert_rejected(api)
-            for extra in ({'openai': dict(latest, unknown_alias='gpt-6-sol')},
+            for extra in ({'openai': dict(latest, unknown_alias='gpt-6.1-sol')},
                           {'openai': latest, 'anthropic': {}}):
                 api = ChannelAPI()
                 api.channels[index]['model_mapping'] = extra
@@ -128,7 +133,7 @@ class ChannelInventoryTests(unittest.TestCase):
                     for ch in api.channels:
                         ch['model_mapping'] = {'openai': {
                             'codex-auto-review': 'gpt-6-luna', 'gpt-5.5': 'gpt-6-luna',
-                            'gpt-5.6-sol': 'gpt-6-sol'}}
+                            'gpt-5.6-sol': 'gpt-6.1-sol'}}
                     api.channels[index][field] = value
                     self.assert_rejected(api)
 

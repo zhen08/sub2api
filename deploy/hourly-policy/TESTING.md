@@ -1,7 +1,7 @@
 # Verification record
 
 The earlier sections below record the original two-hour implementation. The
-current eight-hour upgrade verification is recorded at the end of this file.
+eight-hour upgrade and retry-diagnostics verification are recorded below.
 
 All commands were run with the working directory `deploy/hourly-policy`.
 Only local tests ran; no deployment, production API calls, state changes or
@@ -112,3 +112,45 @@ Final commands (from this directory):
 No commit, push, deployment, live-state access, remote API call or cron change
 was performed. Only local temporary test stores, fake APIs, loopback fixtures
 and bounded local subprocesses were exercised. Parent review is still required.
+
+## Retry notification and SSH diagnostics (2026-09-27)
+
+Source baseline: `ea7df8715ec6175d8cede3e49a7840d56921c29b`; clean canonical
+checkout, no new worktree. Baseline `python3 -m unittest discover -v`:
+**66 tests passed**. The baseline wrapper matches the `4bb6121bc` wrapper bytes.
+
+Observed sequential RED → GREEN slices in `test_retry_diagnostics.py`:
+
+1. Two SSH-255 failures then success: RED in all four direct/cron × empty/transition
+   cases, because the earlier errors remained in stdout and broke cron's compact
+   JSON transformation. Buffer attempts until terminal failure; GREEN. Existing
+   exhaustion and rollover retention assertions remained green.
+2. Bounded stderr classification: RED in 12 subprocess cases (missing codes).
+   Retain only a 4096-byte in-memory prefix, emit static allowlisted codes and
+   discard raw bytes. GREEN including split writes, invalid bytes, fake JSON,
+   secret sentinel, and a recognizable message beyond the prefix cap.
+3. Recovered local record: RED because successful recovery discarded evidence.
+   Add optional private, bounded, replace-only local record; GREEN including
+   clean-success retention, repeated exhaustion, rollover, permissions and size.
+4. Wrapper exceptions: RED in four cases (missing static timeout/unknown code).
+   Add static codes without exception strings; GREEN, including silent recovery.
+5. Fixed exclusive temporary slot: RED because a pre-existing slot did not block
+   publication. Bound disk use even across interrupted writers; GREEN.
+6. Concurrent cleanup: RED because successful replacement could unlink a later
+   writer's newly acquired temporary slot. Relinquish ownership after replace;
+   GREEN. Additional existing-behavior checks confirm failed log writes remain
+   silent, unsafe paths are ignored, target symlinks are not followed, and
+   ordinary failed-write cleanup leaves the prior record unchanged.
+
+Final local checks:
+
+- `python3 -W error -m unittest discover -v`: **74 tests passed**.
+- `python3 -m compileall -q .`: passed.
+- `git diff --check`: passed.
+- Existing timeout, concurrent stdin/stdout/stderr, shared output limit, killpg,
+  hour/deadline guard, channel-drift allowlist, thresholds and eight-zero-hour
+  tests all retained and passing. `controller.py` and `run_cron.py` unchanged.
+
+No commit, push, deployment, live SSH, gateway change, threshold change, or
+production state write was performed by this repair. Parent deployment review
+must configure the optional local state path explicitly if retention is desired.

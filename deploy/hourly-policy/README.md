@@ -22,6 +22,25 @@ validation.
 - Existing recovery-window guards, group-8 bootstrap and severity thresholds are
   unchanged. No bulk policy reset is performed.
 
+### Model targets and channel migration
+
+The persisted/API policy name `terra` now caps rank-above-3 text models to
+`gpt-6.1-sol`. Exact ranks are: Astra/5.6 Sol/5.6 Terra = 4; 6.1 Sol/6 Sol = 3;
+5.6 Luna = 2; 6 Luna = 1. An explicit `gpt-6-sol` remains that model, not a forced
+upgrade. `luna` still caps to `gpt-6-luna`; `original` and `full` retain their
+existing semantics. Unknown models and dedicated image/audio billing are unchanged.
+Restricted text charges use the actual dispatched model and exact same-model
+pricing (including known spelling/effort/date/compact aliases), never another
+Sol generation, tier, wildcard, or generic fallback when its price is absent.
+
+For each source channel, inventory accepts only the complete three-entry OpenAI
+mapping: `codex-auto-review` and `gpt-5.5` → `gpt-6-luna`, plus `gpt-5.6-sol` →
+`gpt-6.1-sol` (new) or `gpt-6-sol` (current live compatibility). Each channel may
+migrate independently. All membership, status, billing and feature/pricing guards
+remain enforced. The dated live fixture is historical evidence and is not rewritten.
+This source change does not modify live channel mappings or deploy anything;
+production migration requires separate authorization and exact-price provisioning.
+
 ### Existing state and interrupted runs
 
 State remains version 1 for compatibility. The legacy names `low` and
@@ -63,6 +82,11 @@ reasons are `eight_consecutive_hours_eq_0`.
   optionally prefixed with `user@`. No default destination or login is shipped.
   For IPv6, use an SSH-config alias.
 - `HOURLY_POLICY_SSH_PORT`: decimal port 1–65535, default `22`.
+- `HOURLY_POLICY_LOCAL_STATE_DIR`: optional **existing absolute local directory**
+  for sanitized retry evidence, e.g. `/home/zhen/Repo/aiproxy-hourly-policy/state`.
+  Provision it separately with owner-only permissions (`0700`), owned by the
+  runner. It is not the remote controller state directory. No directory is
+  automatically created, and there is no default or home-directory fallback.
 
 For example, `operator@policy.example.test` is a documentation placeholder, not
 an installed destination. Missing/invalid configuration fails before SSH starts,
@@ -85,7 +109,38 @@ than silently editing groups/channels/keys. Review these assumptions before any
 installation; the controller is not a universal auto-configurator.
 
 Successful cron transitions emit only `email`, `from`, `to`; no-change runs are
-silent. Diagnostics remain visible. State, dry-run output and operational logs
+silent, including successful retries. Failed-attempt diagnostics are buffered:
+success emits only the successful attempt's stdout; three failed attempts emit
+all sanitized attempt diagnostics followed by `retries_exhausted`. Hour/deadline
+guard exits retain prior attempt diagnostics followed by the guard error.
+The 900-second total budget, attempt bounds, pinned hour and process-group
+cleanup are unchanged.
+
+SSH diagnostics expose only static `ssh_error` codes: `timeout`, `refused`,
+`network_unreachable`, `auth_failed`, `host_key`, `connection_closed`, `unknown`.
+Classification examines at most the first 4096 stderr bytes in memory, across
+read chunks, while the existing combined output limit remains enforced. Raw
+stderr is neither returned nor printed nor persisted. Classification is a
+best-effort English-message heuristic, not proof of an underlying network cause;
+unrecognized, localized or prefix-truncated messages classify as `unknown`.
+
+When local state is configured, `last-retry-failure.json` retains the most recent
+failure-bearing run (recovered or terminal), at most three sanitized attempt
+records and 4096 bytes. It includes the pinned hour and outcome, not SSH host,
+credentials, remote stdout, stderr or transition emails. Clean first-attempt
+success leaves it intact. Replacement uses a private `0600` file and a directory
+descriptor; final-component directory symlinks are rejected and target-file
+symlinks are replaced, not followed. Root and the home directory itself are
+rejected. Use a trusted local filesystem and trusted parent directories.
+
+This record is optional, best-effort, and not a durable audit journal: missing,
+unsafe or unwritable directories do not change policy execution or notification
+output. One exclusive `.last-retry-failure.tmp` slot bounds temporary disk use;
+an interrupted writer can leave it behind. In that case recording is skipped
+until an operator verifies no writer is active and removes the stale slot.
+No automatic cleanup of another writer's slot is performed.
+
+State, dry-run output and operational logs
 can contain personal data and must never be committed.
 
 ## Local verification (no deployment)

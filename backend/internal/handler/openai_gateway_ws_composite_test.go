@@ -81,14 +81,14 @@ func TestOpenAIResponsesWebSocket_CompositeAlias(t *testing.T) {
 func TestOpenAIResponsesWebSocket_CompositeRouteRespectsUserModelPolicy(t *testing.T) {
 	got := runOpenAIResponsesWebSocketUsageLogCase(t, openAIResponsesWSUsageLogCase{
 		firstPayload:         `{"type":"response.create","model":"gpt-6-astra","input":"hi"}`,
-		group:                compositeWSGroup("gpt-6-astra", "gpt-5.6-terra"),
+		group:                compositeWSGroup("gpt-6-astra", "gpt-6.1-sol"),
 		userModelPolicyLevel: "terra",
 		compositeResolver: service.NewCompositeRouteResolver(&compositeWSRouteRepo{routes: []service.CompositeModelRoute{
 			{GroupID: 4201, PublicModel: "gpt-6-astra", MatchType: service.CompositeRouteMatchExact, TargetPlatform: service.PlatformOpenAI, Endpoint: service.CompositeRouteEndpointResponses, UpstreamModel: "opaque-high", Enabled: true},
-			{GroupID: 4201, PublicModel: "gpt-5.6-terra", MatchType: service.CompositeRouteMatchExact, TargetPlatform: service.PlatformOpenAI, Endpoint: service.CompositeRouteEndpointResponses, UpstreamModel: "gpt-5.6-terra", Enabled: true},
+			{GroupID: 4201, PublicModel: "gpt-6.1-sol", MatchType: service.CompositeRouteMatchExact, TargetPlatform: service.PlatformOpenAI, Endpoint: service.CompositeRouteEndpointResponses, UpstreamModel: "gpt-6.1-sol", Enabled: true},
 		}}),
 	})
-	require.Equal(t, "gpt-5.6-terra", gjson.GetBytes(got.upstreamFirstPayload, "model").String())
+	require.Equal(t, "gpt-6.1-sol", gjson.GetBytes(got.upstreamFirstPayload, "model").String())
 }
 
 func TestOpenAIResponsesWebSocket_CompositeRouteRejections(t *testing.T) {

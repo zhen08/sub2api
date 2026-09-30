@@ -341,10 +341,11 @@ def inventory(api):
     for gid, cid in ((6,2),(8,1)):
         found = [v for v in channels if gid in v.get('group_ids', [])]
         mapping = {'codex-auto-review':'gpt-6-luna', 'gpt-5.5':'gpt-6-luna',
-                   'gpt-5.6-sol':'gpt-6-sol'}
-        # Both OpenAI source channels must route this legacy model name to Sol.
-        # Accept only the complete reviewed mapping, never subsets or aliases.
-        accepted_mappings = ({'openai':mapping},)
+                   'gpt-5.6-sol':'gpt-6.1-sol'}
+        # Permit each complete current/live or new configuration during migration.
+        # Never accept subsets, extra aliases, or edit channels from the controller.
+        legacy_mapping = dict(mapping, **{'gpt-5.6-sol':'gpt-6-sol'})
+        accepted_mappings = ({'openai':mapping}, {'openai':legacy_mapping})
         if len(found) != 1:
             raise PolicyError('source channel membership drift')
         ch = found[0]
