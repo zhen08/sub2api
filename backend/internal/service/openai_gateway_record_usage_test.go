@@ -1843,7 +1843,7 @@ func TestOpenAIGatewayServiceRecordUsage_ChannelMappedOverridesBillingModelWhenM
 }
 
 func TestOpenAIUserModelPolicyMissingPriceDoesNotChargeOriginal(t *testing.T) {
-	for _, capModel := range []string{"gpt-6-sol", "gpt-6-luna"} {
+	for _, capModel := range []string{"gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"} {
 		for _, fallback := range []string{"gpt-6", "gpt-5.4"} {
 			for _, unified := range []bool{false, true} {
 				for _, freeFast := range []bool{false, true} {
@@ -1885,9 +1885,9 @@ func TestOpenAIUserModelPolicyMissingPriceDoesNotChargeOriginal(t *testing.T) {
 }
 
 func TestOpenAIUserModelPolicyExactConfiguredCharge(t *testing.T) {
-	for _, capModel := range []string{"gpt-6-sol", "gpt-6-luna"} {
+	for _, capModel := range []string{"gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"} {
 		for _, source := range []string{"channel", "group"} {
-			for _, configured := range []string{capModel, "gpt-6-astra", "gpt-6*"} {
+			for _, configured := range []string{capModel, "gpt-6-sol", "gpt-6.1-sol", "gpt-5.6-sol", "gpt-6-astra", "gpt-6*"} {
 				t.Run(capModel+"/"+source+"/"+configured, func(t *testing.T) {
 					usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
 					userRepo := &openAIRecordUsageUserRepoStub{}
@@ -1930,7 +1930,7 @@ func TestOpenAIUserModelPolicyExactConfiguredCharge(t *testing.T) {
 // Characterization controls: strict pricing must not leak into dedicated media
 // billing or requests without final restricted-policy dispatch evidence.
 func TestOpenAIUserModelPolicyPricingScope(t *testing.T) {
-	for _, capModel := range []string{"gpt-6-sol", "gpt-6-luna"} {
+	for _, capModel := range []string{"gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"} {
 		for _, mode := range []string{"no_policy", "image", "audio", "exact_catalog", "known_alias", "exact_builtin", "diagnostic"} {
 			t.Run(capModel+"/"+mode, func(t *testing.T) {
 				usageRepo := &openAIRecordUsageLogRepoStub{inserted: true}
@@ -1943,6 +1943,9 @@ func TestOpenAIUserModelPolicyPricingScope(t *testing.T) {
 				expected := 30 * 2e-6 * 1.1
 				switch mode {
 				case "no_policy":
+					if capModel == "gpt-6.1-sol" {
+						catalog.pricingData[capModel] = &LiteLLMModelPricing{InputCostPerToken: 8e-6, OutputCostPerToken: 8e-6}
+					}
 					result.UserPolicyBillingModel = ""
 					expected = 30 * 8e-6 * 1.1
 				case "image":
@@ -1990,7 +1993,8 @@ func TestOpenAIUserModelPolicyActualCharge(t *testing.T) {
 				svc.billingService = NewBillingService(svc.cfg, &PricingService{pricingData: map[string]*LiteLLMModelPricing{
 					"gpt-6-astra": {InputCostPerToken: 9e-6, OutputCostPerToken: 9e-6},
 					"gpt-5.6-sol": {InputCostPerToken: 7e-6, OutputCostPerToken: 7e-6},
-					"gpt-6-sol":   {InputCostPerToken: 2e-6, OutputCostPerToken: 2e-6},
+					"gpt-6.1-sol": {InputCostPerToken: 2e-6, OutputCostPerToken: 2e-6},
+					"gpt-6-sol":   {InputCostPerToken: 3e-6, OutputCostPerToken: 3e-6},
 					"gpt-6-luna":  {InputCostPerToken: 1e-6, OutputCostPerToken: 1e-6},
 				}})
 				svc.settingService = NewSettingService(&userModelPolicyRepo{values: map[string]string{}}, nil)
@@ -2010,7 +2014,7 @@ func TestOpenAIUserModelPolicyActualCharge(t *testing.T) {
 					want = "gpt-5.6-sol"
 				}
 				if level == "terra" {
-					want = "gpt-6-sol"
+					want = "gpt-6.1-sol"
 				}
 				if level == "luna" {
 					want = "gpt-6-luna"
@@ -2361,7 +2365,7 @@ func TestOpenAIGatewayServiceRecordUsage_OutputImageSizeWinsBeforeBillingAndPers
 }
 
 func TestOpenAIGatewayServiceRecordUsage_ImageUsesPerImageBillingEvenWithUsageTokens(t *testing.T) {
-	for _, policyModel := range []string{"", "gpt-6-sol", "gpt-6-luna"} {
+	for _, policyModel := range []string{"", "gpt-6.1-sol", "gpt-6-sol", "gpt-6-luna"} {
 		t.Run("policy/"+policyModel, func(t *testing.T) { testOpenAIImageBillingWithPolicyMarker(t, policyModel) })
 	}
 }

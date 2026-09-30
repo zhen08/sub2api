@@ -22,6 +22,25 @@ validation.
 - Existing recovery-window guards, group-8 bootstrap and severity thresholds are
   unchanged. No bulk policy reset is performed.
 
+### Model targets and channel migration
+
+The persisted/API policy name `terra` now caps rank-above-3 text models to
+`gpt-6.1-sol`. Exact ranks are: Astra/5.6 Sol/5.6 Terra = 4; 6.1 Sol/6 Sol = 3;
+5.6 Luna = 2; 6 Luna = 1. An explicit `gpt-6-sol` remains that model, not a forced
+upgrade. `luna` still caps to `gpt-6-luna`; `original` and `full` retain their
+existing semantics. Unknown models and dedicated image/audio billing are unchanged.
+Restricted text charges use the actual dispatched model and exact same-model
+pricing (including known spelling/effort/date/compact aliases), never another
+Sol generation, tier, wildcard, or generic fallback when its price is absent.
+
+For each source channel, inventory accepts only the complete three-entry OpenAI
+mapping: `codex-auto-review` and `gpt-5.5` → `gpt-6-luna`, plus `gpt-5.6-sol` →
+`gpt-6.1-sol` (new) or `gpt-6-sol` (current live compatibility). Each channel may
+migrate independently. All membership, status, billing and feature/pricing guards
+remain enforced. The dated live fixture is historical evidence and is not rewritten.
+This source change does not modify live channel mappings or deploy anything;
+production migration requires separate authorization and exact-price provisioning.
+
 ### Existing state and interrupted runs
 
 State remains version 1 for compatibility. The legacy names `low` and

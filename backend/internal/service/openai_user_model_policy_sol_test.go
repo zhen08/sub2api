@@ -18,14 +18,14 @@ func TestOpenAIUserModelPolicySolFinalHTTP(t *testing.T) {
 			settings := NewSettingService(&userModelPolicyRepo{values: map[string]string{}}, nil)
 			channel := &ChannelService{}
 			channel.cache.Store(populateChannelCache([]Channel{{ID: 1, Status: StatusActive, GroupIDs: []int64{6}, ModelMapping: map[string]map[string]string{PlatformOpenAI: {
-				"public-sol": "gpt-6-sol", "gpt-6-sol": "gpt-6-astra", "gpt-6-luna": "gpt-6-sol",
+				"public-sol": "gpt-6.1-sol", "gpt-6.1-sol": "gpt-6-astra", "gpt-6-luna": "gpt-6.1-sol",
 			}}}}, map[int64]string{6: PlatformOpenAI}))
 			upstream := &policyCaptureUpstream{}
 			svc := &OpenAIGatewayService{settingService: settings, channelService: channel, httpUpstream: upstream}
 			group := int64(6)
 			identity := WithOpenAIUserModelPolicy(context.Background(), 10, &group)
 			account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Credentials: map[string]any{"model_mapping": map[string]any{
-				"gpt-6-sol": "gpt-6-sol", "gpt-6-luna": "gpt-6-sol",
+				"gpt-6.1-sol": "gpt-6.1-sol", "gpt-6-luna": "gpt-6.1-sol",
 			}}}
 			// The same authenticated identity sees each durable policy change.
 			for _, level := range []string{"original", "terra", "luna", "full"} {
@@ -34,18 +34,18 @@ func TestOpenAIUserModelPolicySolFinalHTTP(t *testing.T) {
 						_, err := settings.SetUserOpenAIModelPolicy(identity, 10, level)
 						require.NoError(t, err)
 					}
-					want := "gpt-6-sol"
+					want := "gpt-6.1-sol"
 					if level == "luna" {
 						want = "gpt-6-luna"
 					}
-					mapped := "gpt-6-sol"
+					mapped := "gpt-6.1-sol"
 					if level == "terra" || level == "luna" {
-						for _, request := range []string{"gpt-6-sol", "public-sol", "gpt-6-astra"} {
+						for _, request := range []string{"gpt-6.1-sol", "public-sol", "gpt-6-astra"} {
 							mapping, err := svc.ResolveUserOpenAIChannelMapping(identity, &group, request)
 							require.NoError(t, err)
 							require.Equal(t, want, mapping.MappedModel, request)
 							mapped = account.GetMappedModel(normalizeCodexModel(mapping.MappedModel))
-							require.Equal(t, "gpt-6-sol", mapped)
+							require.Equal(t, "gpt-6.1-sol", mapped)
 						}
 					}
 					c, _ := gin.CreateTestContext(httptest.NewRecorder())
@@ -56,9 +56,12 @@ func TestOpenAIUserModelPolicySolFinalHTTP(t *testing.T) {
 					require.NoError(t, err)
 					require.NoError(t, response.Body.Close())
 					require.Equal(t, want, upstream.models[len(upstream.models)-1])
-					result := &OpenAIForwardResult{Model: "gpt-6-sol", UpstreamModel: mapped, BillingModel: mapped}
+					result := &OpenAIForwardResult{Model: "gpt-6.1-sol", UpstreamModel: mapped, BillingModel: mapped}
 					finish(result)
-					require.Equal(t, "gpt-6-sol", result.Model)
+					if level == "terra" {
+						assertSol61DispatchCharge(t, result)
+					}
+					require.Equal(t, "gpt-6.1-sol", result.Model)
 					require.Equal(t, want, result.UpstreamModel)
 					require.Equal(t, want, result.BillingModel)
 					if level != "original" {
@@ -74,10 +77,11 @@ func TestOpenAIUserModelPolicySolFinalHTTP(t *testing.T) {
 
 func TestOpenAIUserModelPolicySolRank(t *testing.T) {
 	for _, tc := range []struct{ model, terra, luna string }{
-		{"gpt-6-astra", "gpt-6-sol", "gpt-6-luna"},
-		{"gpt-5.6-sol", "gpt-6-sol", "gpt-6-luna"},
+		{"gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"},
+		{"gpt-5.6-sol", "gpt-6.1-sol", "gpt-6-luna"},
 		{"gpt-6-sol", "gpt-6-sol", "gpt-6-luna"},
-		{"gpt-5.6-terra", "gpt-6-sol", "gpt-6-luna"},
+		{"gpt-6.1-sol", "gpt-6.1-sol", "gpt-6-luna"},
+		{"gpt-5.6-terra", "gpt-6.1-sol", "gpt-6-luna"},
 		{"gpt-5.6-luna", "gpt-5.6-luna", "gpt-6-luna"},
 		{"gpt-6-luna", "gpt-6-luna", "gpt-6-luna"},
 	} {
@@ -111,6 +115,33 @@ func TestOpenAIUserModelPolicySolAliases(t *testing.T) {
 		})
 	}
 	for _, model := range []string{"gpt-6-solar", "gpt-6-sol-custom", "custom-gpt-6-sol", "gpt-6-solstice", "gpt-6-sol-20260923", "gpt-6-other", "claude-sonnet-4", "gpt-4o"} {
+		t.Run("unknown/"+model, func(t *testing.T) {
+			require.Empty(t, normalizeKnownOpenAICodexModel(model))
+			require.Equal(t, model, normalizeCodexModel(model))
+			for _, level := range []string{"terra", "luna", "full", "original"} {
+				require.Equal(t, model, clampUserOpenAIModel(level, model))
+			}
+		})
+	}
+}
+
+func TestOpenAIUserModelPolicySol61Aliases(t *testing.T) {
+	for _, model := range []string{"gpt-6.1-sol", "openai/GPT_6.1_SOL", "gpt-6.1-sol-high", "gpt-6.1-sol-2026-09-23", "gpt-6.1-sol-openai-compact"} {
+		t.Run(model, func(t *testing.T) {
+			require.Equal(t, "gpt-6.1-sol", normalizeKnownOpenAICodexModel(model))
+			require.Equal(t, "gpt-6.1-sol", normalizeCodexModel(model))
+			require.False(t, isOpenAIGPT6AstraModel(model))
+			require.Equal(t, "gpt-6.1-sol", clampUserOpenAIModel("terra", model))
+			require.Equal(t, "gpt-6-luna", clampUserOpenAIModel("luna", model))
+			require.Equal(t, "gpt-6.1-sol", clampUserOpenAIModel("full", model))
+			require.Equal(t, model, clampUserOpenAIModel("original", model))
+			candidates := usageBillingModelCandidates(model)
+			require.Contains(t, candidates, "gpt-6.1-sol")
+			require.NotContains(t, candidates, "gpt-5.6-sol")
+			require.NotContains(t, candidates, "gpt-6-astra")
+		})
+	}
+	for _, model := range []string{"gpt-6.1-solar", "gpt-6.1-sol-custom", "custom-gpt-6.1-sol", "gpt-6.1-solstice", "gpt-6.1-sol-20260923", "gpt-6-other", "claude-sonnet-4", "gpt-4o"} {
 		t.Run("unknown/"+model, func(t *testing.T) {
 			require.Empty(t, normalizeKnownOpenAICodexModel(model))
 			require.Equal(t, model, normalizeCodexModel(model))

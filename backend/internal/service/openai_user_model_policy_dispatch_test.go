@@ -21,6 +21,7 @@ func TestIndependentPolicyFinalGateMetadata(t *testing.T) {
 	for _, tc := range []struct{ request, upstream string }{
 		{"openai/GPT-6", "gpt-6-astra"},
 		{"gpt-6-sol", "gpt-6-sol"},
+		{"gpt-6.1-sol", "gpt-6.1-sol"},
 		{"gpt-5.6-sol", "gpt-5.6-sol"},
 		{"gpt-5.6-terra", "gpt-5.6-terra"},
 		{"gpt-5.6-luna", "gpt-5.6-luna"},
@@ -92,7 +93,7 @@ func testIndependentPolicyFinalGateMetadata(t *testing.T, requestedModel, mapped
 			pool := newOpenAIWSConnPool(cfg)
 			defer pool.Close()
 			svc := &OpenAIGatewayService{cfg: cfg, settingService: settings, httpUpstream: &policyRealHTTPUpstream{}, cache: &stubGatewayCache{}, openaiWSResolver: NewOpenAIWSProtocolResolver(cfg), toolCorrector: NewCodexToolCorrector(), openaiWSPool: pool}
-			account := &Account{ID: 901, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Credentials: map[string]any{"api_key": "stub", "base_url": upstream.URL, "model_mapping": map[string]any{"gpt-6-sol": mappedModel, "gpt-6-luna": mappedModel, "gpt-5.6-luna": "gpt-5.6-luna", mappedModel: mappedModel}}, Extra: map[string]any{"responses_websockets_v2_enabled": true, "openai_apikey_responses_websockets_v2_mode": mode}}
+			account := &Account{ID: 901, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Status: StatusActive, Schedulable: true, Concurrency: 1, Credentials: map[string]any{"api_key": "stub", "base_url": upstream.URL, "model_mapping": map[string]any{"gpt-6.1-sol": mappedModel, "gpt-6-sol": mappedModel, "gpt-6-luna": mappedModel, "gpt-5.6-luna": "gpt-5.6-luna", mappedModel: mappedModel}}, Extra: map[string]any{"responses_websockets_v2_enabled": true, "openai_apikey_responses_websockets_v2_mode": mode}}
 			ended := make(chan error, 1)
 			gateway := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 				conn, e := coderws.Accept(w, r, nil)
@@ -141,8 +142,11 @@ func testIndependentPolicyFinalGateMetadata(t *testing.T, requestedModel, mapped
 					if level == "full" {
 						want = mappedModel
 					} else {
-						want = map[string]string{"terra": "gpt-6-sol", "luna": "gpt-6-luna"}[level]
+						want = map[string]string{"terra": "gpt-6.1-sol", "luna": "gpt-6-luna"}[level]
 					}
+				}
+				if level == "terra" && requestedModel == "gpt-6-sol" {
+					want = "gpt-6-sol"
 				}
 				if level == "terra" && requestedModel == "gpt-5.6-luna" {
 					want = "gpt-5.6-luna"
@@ -158,6 +162,9 @@ func testIndependentPolicyFinalGateMetadata(t *testing.T, requestedModel, mapped
 				case got := <-models:
 					require.Equal(t, want, got)
 					result := <-results
+					if level == "terra" && got == "gpt-6.1-sol" {
+						assertSol61DispatchCharge(t, result)
+					}
 					require.Equal(t, got, result.UpstreamModel, "final dispatch metadata must match model actually sent")
 					if i == 0 {
 						require.Equal(t, got, result.BillingModel)
