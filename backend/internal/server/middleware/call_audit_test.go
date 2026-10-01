@@ -429,13 +429,40 @@ func readArtifactPayload(t *testing.T, spoolDir string, manifest callaudit.Manif
 	return nil
 }
 
+func TestWaitForReadyManifestsIgnoresAtomicWriteStagingFiles(t *testing.T) {
+	directory := t.TempDir()
+	for name, content := range map[string]string{
+		".callaudit-staging.tmp": "",
+		"request-event.json":     "{}",
+	} {
+		if err := os.WriteFile(filepath.Join(directory, name), []byte(content), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	entries := waitForReadyManifests(t, directory, 1)
+	if len(entries) != 1 || entries[0].Name() != "request-event.json" {
+		t.Fatalf("ready manifests = %v; want request-event.json", entries)
+	}
+}
+
 func waitForReadyManifests(t *testing.T, directory string, want int) []os.DirEntry {
 	t.Helper()
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		entries, err := os.ReadDir(directory)
-		if err == nil && len(entries) == want {
-			return entries
+		if err == nil {
+			ready := entries[:0]
+			for _, entry := range entries {
+				// Atomic writes stage temporary files in the ready directory;
+				// only published manifests are visible to the spool processor.
+				if entry.Type().IsRegular() && strings.HasSuffix(entry.Name(), "-event.json") {
+					ready = append(ready, entry)
+				}
+			}
+			entries = ready
+			if len(entries) == want {
+				return entries
+			}
 		}
 		if time.Now().After(deadline) {
 			t.Fatalf("ready manifests in %s = %v, %v; want %d", directory, entries, err, want)
