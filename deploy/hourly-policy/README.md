@@ -111,10 +111,26 @@ installation; the controller is not a universal auto-configurator.
 Successful cron transitions emit only `email`, `from`, `to`; no-change runs are
 silent, including successful retries. Failed-attempt diagnostics are buffered:
 success emits only the successful attempt's stdout; three failed attempts emit
-all sanitized attempt diagnostics followed by `retries_exhausted`. Hour/deadline
-guard exits retain prior attempt diagnostics followed by the guard error.
-The 900-second total budget, attempt bounds, pinned hour and process-group
-cleanup are unchanged.
+all sanitized attempt diagnostics followed by `retries_exhausted`. Attempts are
+scheduled at monotonic offsets **0, 300, 630 seconds** from the first attempt's
+budget start, not relative delays after failures. This spreads fast connection
+failures across ten and a half minutes while preserving up to 269 seconds of
+process time plus a one-second cleanup reserve per attempt within the existing
+900-second total budget. Sleeps and attempt timeouts are clipped/refused at the
+pinned hour boundary; an overslept deadline cannot launch another attempt.
+Only SSH exit 255 with a transient static classification (`timeout`, `refused`,
+`network_unreachable`, `connection_closed`) is retried. Unknown/auth/host-key
+failures, remote application errors, unexpected successful stderr, local process
+errors, output-limit failures and local watchdog expiry terminate with
+`non_retryable_failure`. A local watchdog expiry is not proof of an SSH transport
+failure. Pending journals remain untouched for reconciliation. Permanent security
+classifications take precedence over transient words in the captured prefix.
+Hour/deadline guard exits retain prior diagnostics followed by the guard error.
+The pinned hour, remote idempotency, byte bounds and process-group cleanup remain
+unchanged. A 15-minute retry budget starting at :05 cannot outwait a sustained
+outage through :22; this is dispersed retry, not a guarantee against that outage.
+Before installation, verify the scheduler's **script** timeout exceeds 900 seconds
+plus startup/diagnostic overhead (agent inactivity timeouts are a different limit).
 
 SSH diagnostics expose only static `ssh_error` codes: `timeout`, `refused`,
 `network_unreachable`, `auth_failed`, `host_key`, `connection_closed`, `unknown`.

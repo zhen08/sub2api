@@ -10,6 +10,7 @@ from unittest.mock import patch
 import controller as c
 import run_remote as r
 from test_controller import FakeAPI
+from test_retry_schedule import transport
 
 
 class FixTests(unittest.TestCase):
@@ -41,7 +42,7 @@ class FixTests(unittest.TestCase):
         clock = [101*3600+300]
         out = io.StringIO()
         def sleep(delay): clock[0] = 102*3600+1
-        with patch.object(r, 'bounded_process', return_value=subprocess.CompletedProcess([],255,b'')) as attempt, patch.object(r.time, 'time', side_effect=lambda:clock[0]), patch.object(r.time, 'sleep', side_effect=sleep), patch('sys.argv',['run_remote.py']), contextlib.redirect_stdout(out):
+        with patch.object(r, 'bounded_process', return_value=transport()) as attempt, patch.object(r.time, 'time', side_effect=lambda:clock[0]), patch.object(r.time, 'sleep', side_effect=sleep), patch('sys.argv',['run_remote.py']), contextlib.redirect_stdout(out):
             self.assertEqual(r.main(), 1)
         self.assertEqual(attempt.call_count, 1)
         self.assertEqual(json.loads(out.getvalue().splitlines()[-1])['error'], 'hour_rollover')
@@ -116,7 +117,7 @@ class FixTests(unittest.TestCase):
                 if kind == 'hour': clock['wall'] = 102*3600-2
                 elif kind == 'rollover': clock['wall'] = 102*3600+1
                 else: clock['mono'] = 899
-                return subprocess.CompletedProcess([], 255, b'')
+                return transport()
             def sleep(delay):
                 sleeps.append(delay)
                 clock['mono'] += delay; clock['wall'] += delay
@@ -138,14 +139,15 @@ class FixTests(unittest.TestCase):
         import sys
         for code in (255, 1):
             delays = []; out = io.StringIO(); err = io.StringIO()
-            fake = [sys.executable, '-c', f"import sys; sys.stderr.write('sudo/ssh DUMMY-SECRET'); print('DUMMY-SECRET'); sys.exit({code})"]
+            fake = [sys.executable, '-c', f"import sys; sys.stderr.write('Connection timed out DUMMY-SECRET'); print('DUMMY-SECRET'); sys.exit({code})"]
             with patch.object(r, 'command', return_value=fake) as command, patch.object(r.time, 'time', return_value=101*3600+300), patch.object(r.time, 'sleep', side_effect=delays.append), patch('sys.argv', ['run_remote.py']), contextlib.redirect_stdout(out), contextlib.redirect_stderr(err):
                 self.assertEqual(r.main(), 1)
             records = [json.loads(line) for line in out.getvalue().splitlines()]
-            self.assertEqual([v['exit_code'] for v in records[:-1]], [code]*3)
-            self.assertEqual(records[-1]['error'], 'retries_exhausted')
-            self.assertEqual(command.call_count, 3)
-            self.assertEqual(delays, [5, 15])
+            count = 3 if code == 255 else 1
+            self.assertEqual([v['exit_code'] for v in records[:-1]], [code]*count)
+            self.assertEqual(records[-1]['error'], 'retries_exhausted' if code == 255 else 'non_retryable_failure')
+            self.assertEqual(command.call_count, count)
+            self.assertEqual(len(delays), count - 1)
             self.assertNotIn('DUMMY-SECRET', out.getvalue() + err.getvalue())
 
     def test_wrapper_timeout_and_oserror_are_sanitized(self):
@@ -154,7 +156,7 @@ class FixTests(unittest.TestCase):
             out = io.StringIO()
             with patch.object(r, 'bounded_process', side_effect=error), patch.object(r.time, 'time', return_value=101*3600+300), patch.object(r.time, 'sleep'), patch('sys.argv', ['run_remote.py']), contextlib.redirect_stdout(out):
                 self.assertEqual(r.main(), 1)
-            self.assertEqual(len(out.getvalue().splitlines()), 4)
+            self.assertEqual(len(out.getvalue().splitlines()), 2)
             self.assertNotIn('DUMMY-SECRET', out.getvalue())
 
     def test_wrapper_success_nochange_silence_and_readonly_summary(self):
@@ -188,12 +190,12 @@ class FixTests(unittest.TestCase):
                 except OSError:
                     self.assertIn('pending', store.load())
                     api.put = original
-                    return subprocess.CompletedProcess(cmd, 255, b'DUMMY-SECRET')
+                    return transport('connection_closed')
             out = io.StringIO()
             with patch.object(r.subprocess, 'run', side_effect=AssertionError('unbounded single attempt path')), patch.object(r, 'bounded_process', side_effect=attempt), patch.object(r.time, 'time', return_value=101*3600+300), patch.object(r.time, 'sleep', side_effect=delays.append), patch('sys.argv', ['run_remote.py', '--apply']), contextlib.redirect_stdout(out):
                 self.assertEqual(r.main(), 0)
             self.assertEqual(len(calls), 2)
-            self.assertEqual(delays, [5])
+            self.assertEqual(len(delays), 1)  # Timing is covered by fake-clock schedule tests.
             self.assertNotIn('pending', store.load())
             self.assertEqual(len(api.writes), 1)
             self.assertNotIn('DUMMY-SECRET', out.getvalue())

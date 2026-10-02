@@ -18,7 +18,7 @@ class RemoteConfigTests(unittest.TestCase):
                 patch.object(r.time, 'sleep'), patch('sys.argv', ['run_remote.py']), \
                 contextlib.redirect_stdout(out):
             self.assertEqual(r.main(), 1)
-        self.assertEqual(process.call_count, 3)
+        self.assertEqual(process.call_count, 1)
         return [json.loads(line) for line in out.getvalue().splitlines()]
 
     def test_allowlisted_channel_drift_visible_on_remote_exit_one(self):
@@ -29,7 +29,7 @@ class RemoteConfigTests(unittest.TestCase):
             self.assertEqual(record['error'], 'ssh_nonzero')
             self.assertEqual(record.get('remote_error'), 'source channel configuration drift')
             self.assertEqual(record['exit_code'], 1)
-        self.assertEqual(records[-1]['error'], 'retries_exhausted')
+        self.assertEqual(records[-1]['error'], 'non_retryable_failure')
         self.assertNotIn('DUMMY-SECRET', json.dumps(records))
 
     def test_remote_failure_diagnostics_never_echo_untrusted_data(self):
