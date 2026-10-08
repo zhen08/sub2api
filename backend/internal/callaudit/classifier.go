@@ -88,6 +88,7 @@ func IsEligibleRoute(method, target string) bool {
 
 func isAIInvocationPath(pathname string) bool {
 	if strings.HasSuffix(pathname, "/messages") ||
+		strings.HasSuffix(pathname, "/systemone") ||
 		strings.HasSuffix(pathname, "/chat/completions") ||
 		strings.HasSuffix(pathname, "/completions") ||
 		strings.HasSuffix(pathname, "/embeddings") ||

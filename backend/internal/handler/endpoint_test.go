@@ -23,6 +23,7 @@ func TestNormalizeInboundEndpoint(t *testing.T) {
 	}{
 		// Direct canonical paths.
 		{"/v1/messages", EndpointMessages},
+		{"/v1/systemone", EndpointSystemOne},
 		{"/v1/chat/completions", EndpointChatCompletions},
 		{"/v1/completions", EndpointChatCompletions},
 		{"/v1/embeddings", EndpointEmbeddings},
@@ -107,6 +108,7 @@ func TestDeriveUpstreamEndpoint(t *testing.T) {
 	}{
 		// Anthropic.
 		{"anthropic messages", EndpointMessages, "/v1/messages", service.PlatformAnthropic, EndpointMessages},
+		{"typesafe system one", EndpointSystemOne, "/v1/systemone", service.PlatformTypeSafe, EndpointSystemOne},
 
 		// Gemini.
 		{"gemini models", EndpointGeminiModels, "/v1beta/models/gemini:gen", service.PlatformGemini, EndpointGeminiModels},
