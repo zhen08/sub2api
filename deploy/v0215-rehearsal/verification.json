@@ -1,0 +1,244 @@
+{
+  "status": "isolated_repair_and_rehearsal_passed",
+  "checked_at": "2026-10-12T04:55:19.153520+00:00",
+  "scope": "Deployment and rollback rehearsal; production remains on 0.2.11.",
+  "incident": {
+    "operation": "c58632626592b3fe687b4cc04e62d613",
+    "failed_stage": "restore",
+    "production_migrations_started": false,
+    "cause": "Logical restore was rejected for PostgreSQL minor-version, dropped-column ordinal gaps and equivalent CHECK-expression rendering. Traffic fencing remained closed after the failure.",
+    "backup_sha256": "e030e0a799f0ee323885403d2c09fc7b3d9b08e845971d8ff46d0dd2bbb08f23"
+  },
+  "repairs": [
+    {
+      "component": "restore verification",
+      "change": "Compare logical column order and narrowly canonicalize the observed enum CHECK cast forms; retain exact schema, index, constraints and data checks. Only PostgreSQL 18 to same/newer 18 minor is accepted."
+    },
+    {
+      "component": "frontend verification",
+      "change": "Exclude only the generated CSP nonce from the HTML fingerprint. Require fresh normalized HTML hashes and exact asset hashes; reject stale raw-only reports before cutover."
+    }
+  ],
+  "regression_tests": {
+    "passed": 9,
+    "real_schema_or_data_drift_mutations_rejected": 16,
+    "command": "PYTHONDONTWRITEBYTECODE=1 python3 -m unittest discover -s deploy/v0215-rehearsal -p 'test_*.py' -v"
+  },
+  "original_failure_reproduced": {
+    "backup_sha256": "e030e0a799f0ee323885403d2c09fc7b3d9b08e845971d8ff46d0dd2bbb08f23",
+    "network": "none",
+    "production_access": false,
+    "status": "failed",
+    "error_type": "RuntimeError",
+    "error": "restored_full_catalog",
+    "elapsed_seconds": 69.111,
+    "cleanup": {
+      "revision": "645c322a6ceed7fa9e152d8a97044fedea956f01",
+      "status": "failed_cleaned",
+      "unresolved": []
+    }
+  },
+  "fixed_restore": {
+    "status": "passed",
+    "elapsed_seconds": 68.852,
+    "table_count": 100,
+    "row_count": 1225715,
+    "comparison": {
+      "source_server_version_num": 180004,
+      "restored_server_version_num": 180006,
+      "logical_catalog_equal": true,
+      "columns": 1430,
+      "constraints": 1236,
+      "row_hashes_equal": true
+    },
+    "cleanup": {
+      "revision": "645c322a6ceed7fa9e152d8a97044fedea956f01",
+      "status": "cleaned",
+      "unresolved": []
+    }
+  },
+  "actual_image_rehearsal": {
+    "status": "passed",
+    "production_access": false,
+    "network": "none",
+    "revision": "645c322a6ceed7fa9e152d8a97044fedea956f01",
+    "runs": [
+      {
+        "label": "old_before",
+        "image": "sha256:bd8e1681089feb67a4c4e4609bfe9745cc354ea1bb0a8681a18c35234416093e",
+        "ledger_count": 290,
+        "catalog_equal_except_exact_delta": true,
+        "effective_false": true,
+        "frontend_sha256": "3bc28677a0d1e50c447588f14055c310fa3a6c2f64b7351282d7ddd3149d3148",
+        "asset_sha256": "60f8490328e9e36d6fa4ec6a0b4e6200e6b403b41ec75a1b3ac16ec0a64d563e",
+        "frontend_contract_sha256": "92bbe61124166f79a133f6193a68c721506bb70d663d1139a41e5d3657d8db88",
+        "rotating_nonce_verified": true,
+        "pricing_sha256": "fe971933519b31c93be7c9937a155e384af13b5c3ec14d8957ab67b6d257ac55"
+      },
+      {
+        "label": "candidate",
+        "image": "sha256:22662cfe27b7413899cd1e764e1605979ccc5e8b1ad1496775888d99cb190d06",
+        "ledger_count": 293,
+        "catalog_equal_except_exact_delta": true,
+        "effective_false": true,
+        "frontend_sha256": "a7618f78b5cc911ec87164f378be250908a047020a6fef658885bb3aaa22022e",
+        "asset_sha256": "e65af337534ad0b18ebd01e8ac672fe1b8107038942cfe07f8675aff639a448d",
+        "frontend_contract_sha256": "df2fbb7d8b581226c5db9d99c92a047e845d255f13fe56eb3013ab318d43a472",
+        "rotating_nonce_verified": true,
+        "pricing_sha256": "fe971933519b31c93be7c9937a155e384af13b5c3ec14d8957ab67b6d257ac55"
+      },
+      {
+        "label": "old_after",
+        "image": "sha256:bd8e1681089feb67a4c4e4609bfe9745cc354ea1bb0a8681a18c35234416093e",
+        "ledger_count": 293,
+        "catalog_equal_except_exact_delta": true,
+        "effective_false": true,
+        "frontend_sha256": "dc8d91fdbeb639c6c3994991d214675469600e91654688782895e225a3afbaf2",
+        "asset_sha256": "60f8490328e9e36d6fa4ec6a0b4e6200e6b403b41ec75a1b3ac16ec0a64d563e",
+        "frontend_contract_sha256": "92bbe61124166f79a133f6193a68c721506bb70d663d1139a41e5d3657d8db88",
+        "rotating_nonce_verified": true,
+        "pricing_sha256": "fe971933519b31c93be7c9937a155e384af13b5c3ec14d8957ab67b6d257ac55"
+      }
+    ],
+    "started_unix": 1791780318.2017844,
+    "restore_comparison": {
+      "source_server_version_num": 180004,
+      "restored_server_version_num": 180006,
+      "logical_catalog_equal": true,
+      "columns": 1430,
+      "constraints": 1236,
+      "row_hashes_equal": true
+    },
+    "cleanup": {
+      "revision": "645c322a6ceed7fa9e152d8a97044fedea956f01",
+      "status": "cleaned",
+      "unresolved": []
+    },
+    "elapsed_seconds": 523.794
+  },
+  "fault_suite": {
+    "kind": "Synthetic application with real Docker, PostgreSQL migrations and nft in a private network namespace.",
+    "scenarios": [
+      {
+        "name": "happy",
+        "passed": true,
+        "elapsed_seconds": 49.366,
+        "cleanup_verified": true
+      },
+      {
+        "name": "backup-corrupt",
+        "passed": true,
+        "elapsed_seconds": 25.492,
+        "cleanup_verified": true
+      },
+      {
+        "name": "verify-error",
+        "passed": true,
+        "elapsed_seconds": 40.981,
+        "cleanup_verified": true
+      },
+      {
+        "name": "migrate-prekill",
+        "passed": true,
+        "elapsed_seconds": 35.308,
+        "cleanup_verified": true
+      },
+      {
+        "name": "migrate-kill",
+        "passed": true,
+        "elapsed_seconds": 41.009,
+        "cleanup_verified": true
+      },
+      {
+        "name": "open-kill",
+        "passed": true,
+        "elapsed_seconds": 48.64,
+        "cleanup_verified": true
+      }
+    ],
+    "containers_removed": 130
+  },
+  "artifact": {
+    "manifest_sha256": "4ad1cc946f165964ccd035c6e31f87821a56067a639d6cbc9b72f342e0929a49",
+    "archive_sha256": "31741f75e3da1ba3e5cee0ff5014d2d73d88ecdbf99e5868ee930960f31f7c4f",
+    "archive_path": "/home/zhen/.hermes/cache/scratch/sub2api-v0215-rehearsal-20261012/v0215_deploy_bundle_4ad1cc946f165964.tar",
+    "patch_sha256": "2b65f5a5de01906a58879a00043c80ef364faa97410afd86ee86051addd4999d",
+    "bootstrap": {
+      "status": "closure_verified",
+      "manifest_sha256": "4ad1cc946f165964ccd035c6e31f87821a56067a639d6cbc9b72f342e0929a49",
+      "activation_authorized": false
+    },
+    "production_deployed": false,
+    "activation_authorized": false,
+    "runtime_evidence_refreshed": true,
+    "supersedes_manifest_sha256": "80355b5a909dcd0adfdfe2878408388c93ad89ac57da4d11112b2e6fd4630983",
+    "patch_roundtrip_verified": true
+  },
+  "package_validation": {
+    "manifest_verified_locally_and_on_server": true,
+    "patch_roundtrip_verified": true,
+    "changed_comparator_module_tampering_rejected": [
+      {
+        "file": "v0215_restore_catalog.py",
+        "rejected": true
+      },
+      {
+        "file": "v0215_frontend_contract.py",
+        "rejected": true
+      }
+    ],
+    "fresh_runtime_gate": {
+      "status": "passed",
+      "manifest_sha256": "4ad1cc946f165964ccd035c6e31f87821a56067a639d6cbc9b72f342e0929a49",
+      "runtime_evidence_mode": "retained_dump_only_no_host_network_clients",
+      "production_activation": false,
+      "ledger_counts": [
+        290,
+        293,
+        293
+      ]
+    }
+  },
+  "production_final_readback": {
+    "checked_at": "2026-10-12T04:55:19.153520+00:00",
+    "image": "zhen-yms/sub2api:0.2.11-a6d4c4f060ad-disabled-inflight",
+    "container_id": "840bf28b688229b4394ff110c5bdc92bbf58cf9c276fbebe9c716da69de22c51",
+    "started_at": "2026-10-12T04:01:37.919124104Z",
+    "healthy": true,
+    "restart_policy": "unless-stopped",
+    "maintenance_fences_absent": true,
+    "http": {
+      "/": 200,
+      "/health": 200,
+      "/v1/models": 401
+    },
+    "runtime_gate": {
+      "status": "passed",
+      "manifest_sha256": "4ad1cc946f165964ccd035c6e31f87821a56067a639d6cbc9b72f342e0929a49",
+      "runtime_evidence_mode": "retained_dump_only_no_host_network_clients",
+      "production_activation": false,
+      "ledger_counts": [
+        290,
+        293,
+        293
+      ]
+    }
+  },
+  "limits": [
+    "Production deployment was not performed. The current cutover procedure still requires a maintenance interruption.",
+    "The isolated application stack had no external network, host binds or published ports. Real upstream inference calls were not exercised.",
+    "Future activation still needs a fresh production preflight, backup and maintenance execution; this report does not activate the package."
+  ],
+  "evidence": {
+    "local_private_root": "/home/zhen/.hermes/cache/scratch/sub2api-v0215-rehearsal-20261012",
+    "remote_private_root": "/var/backups/sub2api-v0215/isolated-fix-20261012",
+    "source_code_sha256": {
+      "run_runtime_rehearsal.py": "75188c88cc7d78133260ad286d3b83d026cc24aae5d13cfff309f696ec98e1e4",
+      "test_restore_catalog.py": "fc843d6ed59a0023e7062491f6b27edb480207153dc6d52f33f68beabd7ef47e",
+      "v0215_restore_catalog.py": "b3e2ad38a7b599e8b243dd413904465e9fafca9ae931e8d2f38b2c252d6e653e",
+      "v0215_frontend_contract.py": "d9ac427469aec5f547466ad39a5cfd80acbc9422c3695000227c0b9e1dcf0c44",
+      "run_restore_rehearsal.py": "0ad7d286a1c5e624b794f9e50ce9f36d3653618fdc5a8ef25684f14aeaadabc8",
+      "test_frontend_contract.py": "c9d343a9ef123850bc9d78cd9ec0081fbe98f0ec424ef276991f2a608bb322b2"
+    }
+  }
+}

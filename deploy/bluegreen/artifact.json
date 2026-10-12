@@ -1,0 +1,6 @@
+{
+  "local_bundle": "/home/zhen/.hermes/cache/scratch/sub2api-bluegreen-20261012/rollout-bundle-r1",
+  "remote_bundle": "/var/backups/sub2api-v0215/bluegreen-20261012/rollout-87b00767056a04fa8",
+  "manifest_sha256": "87b00767056a04fa850c79fc17d7f2a87e3571a3de0b89787cd160771314cb29",
+  "production_activation_authorized": false
+}

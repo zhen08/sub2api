@@ -44,7 +44,7 @@ func NewScheduledTestRunnerService(
 
 // Start begins the cron ticker (every minute).
 func (s *ScheduledTestRunnerService) Start() {
-	if s == nil {
+	if s == nil || !deploymentBackgroundJobsEnabled() {
 		return
 	}
 	s.startOnce.Do(func() {

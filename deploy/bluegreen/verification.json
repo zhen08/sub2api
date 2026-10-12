@@ -1,0 +1,288 @@
+{
+  "status": "isolated_bluegreen_verified_production_activation_not_authorized",
+  "candidate_version": "0.2.15-bg.1",
+  "candidate_image": "sha256:303690f16bd885b9f0ffb6153bbba85f58970ccf8052897bc40478ee980be02b",
+  "lab": {
+    "billing": {
+      "actual_cost": "0.7840000000",
+      "balance_spent": "0.78400000",
+      "distinct_requests": 224,
+      "usage_count": 224
+    },
+    "blue_stayed_running": true,
+    "candidate_image": "sha256:303690f16bd885b9f0ffb6153bbba85f58970ccf8052897bc40478ee980be02b",
+    "cleanup": {
+      "revision": "645c322a6ceed7fa9e152d8a97044fedea956f01",
+      "status": "cleaned",
+      "unresolved": []
+    },
+    "elapsed_seconds": 378.302,
+    "expected_billed_requests": 224,
+    "final_ledger_count": 293,
+    "fixture_ids": [
+      {
+        "account": 72,
+        "group": 9,
+        "key": 228,
+        "user": 121
+      },
+      {
+        "account": 73,
+        "group": 10,
+        "key": 229,
+        "user": 122
+      }
+    ],
+    "ledger_before": 290,
+    "network": "none",
+    "old_image": "sha256:bd8e1681089feb67a4c4e4609bfe9745cc354ea1bb0a8681a18c35234416093e",
+    "online_migration_seconds": 0.136,
+    "parallel_requests": 40,
+    "production_access": false,
+    "production_requests_sent": 0,
+    "restore_comparison": {
+      "columns": 1430,
+      "constraints": 1236,
+      "logical_catalog_equal": true,
+      "restored_server_version_num": 180006,
+      "row_hashes_equal": true,
+      "source_server_version_num": 180004
+    },
+    "scenarios": {
+      "authenticated_traffic": {
+        "failures": 0,
+        "requests": 158
+      },
+      "candidate_hang": {
+        "blue_sha256": "66810a0c3e75b728c1ce1d4e36c8e55a1d855718daa4c211a6ebbb359b8b18d1",
+        "green_sha256": "af90e8de1fa94c22d63e5c43193dd6b1540d794e498d55d65aaf941d31c0a4cd",
+        "old_instance_stopped": false,
+        "reason": "RuntimeError:new_route_not_ready",
+        "rollback_seconds": 1.363,
+        "state": "rolled_back",
+        "total_seconds": 17.525,
+        "updated_monotonic": 2695345.96264617
+      },
+      "coordinator_kill": {
+        "blue_sha256": "66810a0c3e75b728c1ce1d4e36c8e55a1d855718daa4c211a6ebbb359b8b18d1",
+        "green_sha256": "af90e8de1fa94c22d63e5c43193dd6b1540d794e498d55d65aaf941d31c0a4cd",
+        "old_instance_stopped": false,
+        "reason": "coordinator_died_or_deadline_expired",
+        "rollback_seconds": 2.286,
+        "state": "rolled_back",
+        "total_seconds": 3.74,
+        "updated_monotonic": 2695349.894897549
+      },
+      "ddl_lock_timeout": {
+        "ledger_count": 290,
+        "rejected": true,
+        "seconds": 0.168
+      },
+      "invalid_nginx": {
+        "blue_sha256": "66810a0c3e75b728c1ce1d4e36c8e55a1d855718daa4c211a6ebbb359b8b18d1",
+        "green_sha256": "ed665d8c5ebccfc7fe0cdcaf457c29633bc87bbdb576084e1af565d137121789",
+        "old_instance_stopped": false,
+        "reason": "RuntimeError:process_failed_output_suppressed",
+        "rollback_seconds": 0.726,
+        "state": "rolled_back",
+        "updated_monotonic": 2695292.322788306
+      },
+      "preserve_peer_slots": {
+        "passed": true,
+        "slots_preserved": 1
+      },
+      "route_rollback": {
+        "blue_sha256": "66810a0c3e75b728c1ce1d4e36c8e55a1d855718daa4c211a6ebbb359b8b18d1",
+        "green_sha256": "af90e8de1fa94c22d63e5c43193dd6b1540d794e498d55d65aaf941d31c0a4cd",
+        "old_instance_stopped": false,
+        "reason": "exercise",
+        "rollback_seconds": 0.875,
+        "state": "rolled_back",
+        "updated_monotonic": 2695325.311304376
+      },
+      "switch_under_load": {
+        "blue_sha256": "66810a0c3e75b728c1ce1d4e36c8e55a1d855718daa4c211a6ebbb359b8b18d1",
+        "drain_policy": "retain_blue_until_streams_finish_and_operator_confirms_retirement",
+        "green_sha256": "af90e8de1fa94c22d63e5c43193dd6b1540d794e498d55d65aaf941d31c0a4cd",
+        "observation_seconds": 30.256,
+        "old_instance_stopped": false,
+        "state": "active",
+        "switch_seconds": 0.97,
+        "updated_monotonic": 2695324.240114489
+      },
+      "unready": {
+        "blue_sha256": "66810a0c3e75b728c1ce1d4e36c8e55a1d855718daa4c211a6ebbb359b8b18d1",
+        "green_sha256": "af90e8de1fa94c22d63e5c43193dd6b1540d794e498d55d65aaf941d31c0a4cd",
+        "old_instance_stopped": false,
+        "reason": "backend_not_ready",
+        "state": "not_switched",
+        "updated_monotonic": 2695290.814381769
+      }
+    },
+    "shared_concurrency_max": 1,
+    "started": 1791784529.0830884,
+    "status": "passed",
+    "stream": {
+      "complete": true,
+      "kind": "long",
+      "seconds": 135.034,
+      "side": "blue",
+      "status": 200
+    },
+    "traffic": {
+      "failed_including_injected_hang": 18,
+      "max_observed_failure_window_seconds": 16.221,
+      "normal_handoff_failures": 0,
+      "poll_interval_seconds": 0.1,
+      "samples": 1195
+    }
+  },
+  "frontend": {
+    "image": "sha256:303690f16bd885b9f0ffb6153bbba85f58970ccf8052897bc40478ee980be02b",
+    "html_status": 200,
+    "assets": [
+      {
+        "path": "/assets/index-Byziyzw9.js",
+        "status": 200,
+        "sha256": "670c39fc42af6145887963acdf1e7d7256c880f2a03bd856195f413f63fa72ff",
+        "bytes": 187064
+      },
+      {
+        "path": "/assets/index-eYfXJmCi.css",
+        "status": 200,
+        "sha256": "100f97d3d97d3998d2efefd2b84ae259430f20f8539a0ffbe418b6e1f4a246b1",
+        "bytes": 275754
+      },
+      {
+        "path": "/assets/vendor-i18n-B2-ausN2.js",
+        "status": 200,
+        "sha256": "b27b8ddc4c2a73a0c3926652664fcb84464cdeb22fccaa4956324ebc71291123",
+        "bytes": 63323
+      },
+      {
+        "path": "/assets/vendor-misc-DB0Q8XAf.css",
+        "status": 200,
+        "sha256": "4b398481a7ce8375af4d9f58f39410c73a0b70726fe513686d3d51c10ad76cb5",
+        "bytes": 3938
+      },
+      {
+        "path": "/assets/vendor-misc-_4dZK7sQ.js",
+        "status": 200,
+        "sha256": "ecb4f9b917f717080130f8a57d225eab614172733961e0cd531e4926666c6033",
+        "bytes": 279017
+      },
+      {
+        "path": "/assets/vendor-vue-D_j7YHFc.js",
+        "status": 200,
+        "sha256": "876de7f846fe5fc9d7962f135c9bde5ddbc17d61a1629cabd1d63e274e5c915c",
+        "bytes": 114135
+      }
+    ],
+    "production_access": false
+  },
+  "production_unchanged": true,
+  "production_postcheck": {
+    "checked_unix": 1791784969.1853056,
+    "containers": [
+      {
+        "name": "/sub2api",
+        "id": "840bf28b688229b4394ff110c5bdc92bbf58cf9c276fbebe9c716da69de22c51",
+        "image": "sha256:bd8e1681089feb67a4c4e4609bfe9745cc354ea1bb0a8681a18c35234416093e",
+        "started": "2026-10-12T04:01:37.919124104Z",
+        "healthy": "healthy",
+        "restart_policy": "unless-stopped"
+      },
+      {
+        "name": "/nginx-reverse-proxy",
+        "id": "9b79d3e9599582cda206b4ace258de79695974f3386b6bd62543f475585a476f",
+        "image": "sha256:0d3b80406a13a767339fbe2f41406d6c7da727ab89cf8fae399e81f780f814d1",
+        "started": "2026-09-11T01:20:43.601947331Z",
+        "healthy": "healthy",
+        "restart_policy": "unless-stopped"
+      }
+    ],
+    "nginx_config_sha256": "9f129b9ef3698b92b55f1b4b1d92d0f6a6117b5da5425e52d95e6c29907ce0de",
+    "nginx_full_config_sha256": "3153431e5e1c86e389f86a3ab32532a7afd5d90ad7e5487cfa6ff6c6a8ff1abf",
+    "https_health": {
+      "status": "ok"
+    },
+    "remaining_owned_containers": [],
+    "cleanup_receipts": [
+      {
+        "run": "run-r3",
+        "revision": "645c322a6ceed7fa9e152d8a97044fedea956f01",
+        "status": "failed_cleaned",
+        "unresolved": []
+      },
+      {
+        "run": "run-r5",
+        "revision": "645c322a6ceed7fa9e152d8a97044fedea956f01",
+        "status": "cleaned",
+        "unresolved": []
+      },
+      {
+        "run": "run-r2",
+        "revision": "645c322a6ceed7fa9e152d8a97044fedea956f01",
+        "status": "failed_cleaned",
+        "unresolved": []
+      },
+      {
+        "run": "run-r4",
+        "revision": "645c322a6ceed7fa9e152d8a97044fedea956f01",
+        "status": "failed_cleaned",
+        "unresolved": []
+      },
+      {
+        "run": "run-r1",
+        "revision": "645c322a6ceed7fa9e152d8a97044fedea956f01",
+        "status": "failed_cleaned",
+        "unresolved": []
+      },
+      {
+        "run": "nginx-diagnostic",
+        "revision": "645c322a6ceed7fa9e152d8a97044fedea956f01",
+        "status": "failed_cleaned",
+        "unresolved": []
+      },
+      {
+        "run": "nginx-diagnostic-r2",
+        "revision": "645c322a6ceed7fa9e152d8a97044fedea956f01",
+        "status": "failed_cleaned",
+        "unresolved": []
+      }
+    ]
+  },
+  "checks": {
+    "bluegreen_python_tests": {
+      "passed": 15
+    },
+    "restore_and_frontend_python_tests": {
+      "passed": 9
+    },
+    "go_targeted_tests": {
+      "passed": true,
+      "command": "go test -tags unit ./internal/service -run 'Test(MultiInstanceStartup|GatewayInstance|CleanupStaleProcessSlots|ProvideTimingWheelService|Schedule_|Start_|Stop_|BackupService_Schedule|AuditLogService)' -count=1"
+    },
+    "non_test_source_matches_built_snapshot": true,
+    "git_diff_check": true
+  },
+  "evidence": {
+    "remote_report": "/var/backups/sub2api-v0215/bluegreen-20261012/run-r5/report.json",
+    "report_sha256": "7f9011b4d048ffe945149201434247827a9680c3cac9bcc2d0b13a357dd1c9ae",
+    "frontend_sha256": "45ae333f493692072d4254e1da7d013131ba3c7ba8710be41cbc5f368d3ef545",
+    "production_after_sha256": "eccf5fa894b3484e1a42c7546f6eefa4522b8b066ca4d9d37c0583ae495bfa9f"
+  },
+  "boundary": {
+    "production_database_migration_executed": false,
+    "production_candidate_started": false,
+    "production_traffic_switched": false,
+    "production_instance_stopped": false,
+    "approval_receipt_created": false
+  },
+  "limitations": [
+    "Real old/new application images and a full retained database copy used with a loopback synthetic OpenAI upstream, not production provider traffic.",
+    "This lab disabled call-audit external storage, periodic features and external networking; production canaries must verify all existing request-path features with production settings before switching.",
+    "Timing is observed lab behavior, not a production outage guarantee.",
+    "Background job ownership and old-instance retirement remain separate, explicitly confirmed later actions."
+  ]
+}

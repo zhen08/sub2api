@@ -509,6 +509,9 @@ func (s *BackupService) UpdateSchedule(ctx context.Context, cfg BackupScheduleCo
 }
 
 func (s *BackupService) applyCronSchedule(cfg *BackupScheduleConfig) error {
+	if !deploymentBackgroundJobsEnabled() {
+		return nil
+	}
 	s.cronMu.Lock()
 	defer s.cronMu.Unlock()
 

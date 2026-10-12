@@ -1,14 +1,213 @@
+--- a/v0215-retained-runtime-pins.json
++++ b/v0215-retained-runtime-pins.json
+@@ -3,5 +3,5 @@
+-    "cache-execution.json": "6c4ef645949c98ecf282f29621d15eca5e1cf7d87546a0c86e049fa989b52587",
+-    "cache-inputs.json": "33a42f749aef7cf090130f1c1bc45fab7ab2f2b9cc010ae294365af0854733d2",
+-    "candidate-operational-result.json": "17169a053a421ae1180318dcaad6dca1c8257493bd4892d475bacbf26ddb3389",
+-    "candidate-operational.private.json": "db76926dc2a7b0d4e5ed8425e0a6b82b49c83b93d68b95d479919c18b98127a9",
+-    "candidate.json": "aff5b38f4a47897c50c980be912e3d67f9f0f862dd0d06ba0fda5266f8f0a590",
++    "cache-execution.json": "a6b4b8c431af75ad00c0ca9dfa52d1b6b783a97f8e4bc093fa55be5f372a593f",
++    "cache-inputs.json": "e369b3fef05c2274fcfc1f510578d8e578fcb6e01e06329dd10cd67d373fd9ee",
++    "candidate-operational-result.json": "5ce9069126f3a96aa9ad5b04a657c19cd94e03e05f69c566e90fd3b3dc251df8",
++    "candidate-operational.private.json": "e7b5346d2058a4b4c4cfcb321844bad02c6d658b1e9eb658dc274d1593dea918",
++    "candidate.json": "0a427b91b1f825ccfaa3fd3bc7ed5a1900362a553b010b882c33bb27a41825c5",
+@@ -9,8 +9,8 @@
+-    "old_after-operational-result.json": "17169a053a421ae1180318dcaad6dca1c8257493bd4892d475bacbf26ddb3389",
+-    "old_after-operational.private.json": "46a03e6845b2957475e384d4f25144a9387d76f8a22942c0f7a1f3ff88ddbfcf",
+-    "old_after.json": "44f635b7cf6a4251c84a1b179eb8962292d684581d55b4f125a32580e498cef1",
+-    "old_before-operational-result.json": "ebaf0c4cfa76b0165394253cd6999c9d616e1bac179bb3079ae858add9ffabdb",
+-    "old_before-operational.private.json": "14925b29d3f556bb5045de15bd401291b8ed2da06c51008d84fb39642868e044",
+-    "old_before.json": "6a34c766d5f8b6ea6111bd4d1a20424b1e6b80cd34c45bfbe3c2e7135fda6805",
+-    "report.json": "6ae08536d3916e04ab524b66a6381733f2e638c0d8eb1c71ec577a691e39c983",
+-    "restore.json": "c0544e842cb8476aaf1d2982c2fb7404de13b0c4eb49fbbdc5fdcf7556f6d5ff",
++    "old_after-operational-result.json": "f49d2f3072dad44671de40fc607849442317ab50bb62bb87076c272aac0d712a",
++    "old_after-operational.private.json": "01ad86153fef6c33e498240ddad5e4bba32979e782b4c1bd071963ea9a0669dc",
++    "old_after.json": "4f374264b71c069d6f4d17b8f411ce4b30bcb7180a79ebb5e8d41838b46e1218",
++    "old_before-operational-result.json": "623eba660c530a9c8e62105bbb83936f91ceec50d7da45c97ea9367ce7f9b0cd",
++    "old_before-operational.private.json": "6736756194ba297f7ed2b3693c8fd5b5f7eb295b576a8d65016da96f1299fb08",
++    "old_before.json": "93a4d194468854eee2c53e0c4e43967f9f1afa0786c39986a93874fda18c8c16",
++    "report.json": "ce4236e8c6a748a90c05066e228dbb21848b9e15ae726324b6ccb364588fcfea",
++    "restore.json": "eeda01521c19cc22c3dacc929fbc7ee30a4088ca80d477ccac3fa85759400944",
+@@ -18,7 +18,7 @@
+-    "source-snapshot.json": "a4afbe93deebf2f72a54356634f28832ae445b74dc47323af69b7303a40bf778",
+-    "sql-reconciliation.json": "176ce6f18230e15a24eb535985a0da56217c777687697bcf1dd2fb8d4fc16d4e",
+-    "v0215-app-2007c23e98b049e1834255f9a8ad1580.cleanup.json": "f735647375ba57c199cce0523c99cbe44749f385febe839abc255d77f9c51a6e",
+-    "v0215-app-a55225abfea74488b08577c7f59ae730.cleanup.json": "41c996278a20efb5a89b490ecb22d293e644158afba6b78d7cd3997d36912882",
+-    "v0215-app-bde32dc438cd4a1a84c358175f9a2035.cleanup.json": "97f8c1cdd120e58735fa275b603e95fb70c09af8dbde248ac780a8b5559cf549",
+-    "v0215-database-f635f885cb0840b8a80c1e556f371aa6.cleanup.json": "17fb2ea9d08189ec36da0ca7ae958c56ec537935bcab2e2b7a53396ac6f37103",
+-    "v0215-redis-da228a2840944bb7aa6dc154d549a73a.cleanup.json": "193d04abf04eec05405da7c9f9b09a260c22ffda74714cb9d08d1d0d116b1776"
++    "source-snapshot.json": "243c7bc5d4c0a21527e2a155614b56d1de8b23fa13530935694d5857ccab4df7",
++    "sql-reconciliation.json": "92f575ac2642b939071ef4413650a572bc5ee6daeb5c6a4ba26b72773e3de6aa",
++    "v0215-app-5f0b05dfd1db40b7bd86c9f5f1e98787.cleanup.json": "ddbbba157d0b643035463434b927d4e2870e208e0c8e5b60696e673ff6c87d0a",
++    "v0215-app-9f2943c91d6048bba8d815fd2b0cc683.cleanup.json": "857b208d25d52004eabf183e10ee916b1dca90fa123fe101b2aceb3195d52996",
++    "v0215-app-ed44f4bce84346338e1c189b67a1e3e4.cleanup.json": "05f1c127d111c963a2c2d200ea74f5a9b67b572cb29ed64a5925262fbfd7511a",
++    "v0215-database-3c06123198cb43d8bd0b271f5850c48b.cleanup.json": "4d8ee2cf02c4fb9957dea9c196aa396dccef9293fe810ea8a3d075dcad45113e",
++    "v0215-redis-2006844771034c97a2f53c0e6a6fb3e3.cleanup.json": "66d60e1f589c248c2721c8c01ddc11343fe4093b536646bb284410e42da7f5bb"
+@@ -26,2 +26,2 @@
+-  "manifest_sha256": "30158efbb7da6fa13fba8ec3998d386c0a9820355acfd5d96098245925ff78a1",
+-  "source": "/var/backups/sub2api-v0215/rehearsal-bd2c7b16a83c94cc-r1",
++  "manifest_sha256": "33c93ac15a19626dcc579933f27986e37d80d780f4bf86f499ccace8aeae72e2",
++  "source": "/var/backups/sub2api-v0215/deploy-c58632626592b3fe687b4cc04e62d613/backup",
+@@ -29 +29 @@
+-    "database.dump": "bbe2477f3062218a6dda6b32d13a013cb96ff6220856c28bbc60ed4e3c216ff3",
++    "database.dump": "e030e0a799f0ee323885403d2c09fc7b3d9b08e845971d8ff46d0dd2bbb08f23",
+@@ -31,2 +31,2 @@
+-    "snapshot.json": "a4afbe93deebf2f72a54356634f28832ae445b74dc47323af69b7303a40bf778",
+-    "source_inventory.json": "13208cb0f0e947b13fc6b1846668313436c00938c36aa4ea35dd7bc6f45c1a73"
++    "snapshot.json": "243c7bc5d4c0a21527e2a155614b56d1de8b23fa13530935694d5857ccab4df7",
++    "source_inventory.json": "a298fb788959581bc5f9a14d1c422f6c552e6cbca9603d95c43a483d89c05b0d"
+@@ -34 +34 @@
+-  "work": "/var/backups/sub2api-v0215/cache-rehearsal-30158efbb7da6fa1-r1"
++  "work": "/var/backups/sub2api-v0215/isolated-fix-20261012/runtime-r2"
 --- a/v0215_deploy_backend.py
 +++ b/v0215_deploy_backend.py
-@@ -420,8 +420,9 @@
-    need(ledger==json.loads((self.root/'ledger_before.json').read_bytes()),'restored_ledger')
-    restored_catalog=self.live.capture(s,pg);publish(self.root/'restored_catalog.json',restored_catalog)
-    baseline=json.loads((self.root/'catalog_before.json').read_bytes())
+@@ -197,0 +198,2 @@
++ from v0215_frontend_contract import require_frontend_references
++ require_frontend_references(report)
+@@ -423,2 +425,3 @@
 -   need(check_catalog(restored_catalog)==check_catalog(baseline),'restored_full_catalog')
 -  result={'dump_sha256':receipt['dump_sha256'],'all_tables_equal':True,'ledger_count':290,'scratch_removed':True}
 +   from v0215_restore_catalog import verify_restore_catalog
-+  restore_comparison=verify_restore_catalog(baseline,restored_catalog)
++   restore_comparison=verify_restore_catalog(baseline,restored_catalog)
 +  result={'dump_sha256':receipt['dump_sha256'],'all_tables_equal':True,'ledger_count':290,'scratch_removed':True,'catalog_comparison':restore_comparison}
-   publish(self.root/'restore-proof.json',result)
-   return dict(result,artifacts={n:sha(self.root/n) for n in BACKUP_MEMBERS})
-  def backup_closure(self):
+@@ -538 +541,2 @@
+-  need(guard.digest(html)==reference['frontend_sha256'] and guard.digest(asset)==reference['asset_sha256'],'runtime_frontend_not_rehearsed')
++  from v0215_frontend_contract import verify_frontend
++  verify_frontend(reference,html,asset)
+--- a/v0215_deploy_cli.py
++++ b/v0215_deploy_cli.py
+@@ -6 +6 @@
+-CODE={'v0215_maintenance.py','v0215_session_cap.py','v0215_live_deployment.py','v0215_live_producer.py','v0215_live_capture_core.py','v0215_live_capture_sql.py','v0215_deploy_cli.py','v0215_deploy_backend.py','v0215_control.py','v0215_rollout.py','v0215_live.py','v0215_lifecycle.py','v0215_process.py','v0215_guards.py','v0215_retained_cache_guard.py'}
++CODE={'v0215_frontend_contract.py','v0215_restore_catalog.py','v0215_maintenance.py','v0215_session_cap.py','v0215_live_deployment.py','v0215_live_producer.py','v0215_live_capture_core.py','v0215_live_capture_sql.py','v0215_deploy_cli.py','v0215_deploy_backend.py','v0215_control.py','v0215_rollout.py','v0215_live.py','v0215_lifecycle.py','v0215_process.py','v0215_guards.py','v0215_retained_cache_guard.py'}
+--- /dev/null
++++ b/v0215_frontend_contract.py
+@@ -0,0 +1,26 @@
++"""Fingerprint rendered HTML, excluding only the generated CSP nonce."""
++import hashlib
++import re
++
++_NONCE = re.compile(rb'(<script nonce=")[A-Za-z0-9+/]{22}==(">window\.__APP_CONFIG__=)')
++
++
++def frontend_digest(html):
++    canonical, count = _NONCE.subn(rb'\1__CSP_NONCE_VALUE__\2', html)
++    if count != 1:
++        raise RuntimeError('frontend_config_nonce_shape')
++    return hashlib.sha256(canonical).hexdigest()
++
++
++def verify_frontend(reference, html, asset):
++    expected = reference.get('frontend_contract_sha256')
++    if not isinstance(expected, str) or not re.fullmatch('[a-f0-9]{64}', expected):
++        raise RuntimeError('fresh_frontend_contract_required')
++    if frontend_digest(html) != expected or hashlib.sha256(asset).hexdigest() != reference['asset_sha256']:
++        raise RuntimeError('runtime_frontend_not_rehearsed')
++
++
++def require_frontend_references(report):
++    for phase in report.get('runs', []):
++        if not isinstance(phase.get('frontend_contract_sha256'), str) or not re.fullmatch('[a-f0-9]{64}', phase['frontend_contract_sha256']):
++            raise RuntimeError('fresh_frontend_contract_required')
+--- a/v0215_live.py
++++ b/v0215_live.py
+@@ -204,0 +205 @@
++  from v0215_frontend_contract import frontend_digest
+@@ -233 +234 @@
+-  receipt={'label':label,'image':image,'ledger_count':len(rows),'pricing':prices,'catalog_equal_except_exact_delta':True,'frontend_sha256':guard.digest(html),'asset_sha256':guard.digest(asset),'effective_false':True,'ledger':rows}
++  receipt={'label':label,'image':image,'ledger_count':len(rows),'pricing':prices,'catalog_equal_except_exact_delta':True,'frontend_sha256':guard.digest(html),'frontend_contract_sha256':frontend_digest(html),'asset_sha256':guard.digest(asset),'effective_false':True,'ledger':rows}
+--- /dev/null
++++ b/v0215_restore_catalog.py
+@@ -0,0 +1,93 @@
++"""Compare a logical restore without confusing physical layout with schema.
++
++Only PostgreSQL 18 -> the same or a newer PostgreSQL 18 minor is supported.
++This comparator is for pg_dump/pg_restore, never for in-place migration checks.
++"""
++import copy
++import re
++
++
++class RestoreCatalogError(RuntimeError):
++    pass
++
++
++_TOKEN = re.compile(r"'(?:[^']|'')*'|\"(?:[^\"]|\"\")*\"|::|[A-Za-z_][A-Za-z_0-9]*|[0-9]+|[^\s]")
++_ENUM = re.compile(r"'[A-Za-z0-9_]+'\Z")
++
++
++def _constraint_tokens(definition):
++    tokens = _TOKEN.findall(definition)
++    if not tokens or tokens[0] != 'CHECK':
++        return tokens
++    result = []
++    i = 0
++    while i < len(tokens):
++        if tokens[i:i + 3] == ['(', 'ARRAY', '[']:
++            j = i + 3
++            values = []
++            while j + 3 < len(tokens) and _ENUM.fullmatch(tokens[j]):
++                if tokens[j + 1:j + 4] != ['::', 'character', 'varying']:
++                    break
++                values.append(tokens[j:j + 4])
++                j += 4
++                if tokens[j:j + 1] != [',']:
++                    break
++                j += 1
++            if values and tokens[j:j + 6] == [']', ')', '::', 'text', '[', ']']:
++                result += ['ARRAY', '[']
++                for n, value in enumerate(values):
++                    if n:
++                        result.append(',')
++                    result += ['('] + value + [')', '::', 'text']
++                result.append(']')
++                i = j + 6
++                continue
++        result.append(tokens[i])
++        i += 1
++    return result
++
++
++def _canonical(catalog):
++    result = copy.deepcopy(catalog)
++    tables = {}
++    identities = set()
++    for column in result['columns']:
++        identity = (column['table_name'], column['column_name'])
++        position = column['ordinal_position']
++        if identity in identities or type(position) is not int or position < 1:
++            raise RestoreCatalogError('invalid_column_identity_or_position')
++        identities.add(identity)
++        tables.setdefault(identity[0], []).append(column)
++    columns = []
++    for name in sorted(tables):
++        ordered = sorted(tables[name], key=lambda row: row['ordinal_position'])
++        if len({row['ordinal_position'] for row in ordered}) != len(ordered):
++            raise RestoreCatalogError('duplicate_column_position')
++        for position, row in enumerate(ordered, 1):
++            row['ordinal_position'] = position
++            columns.append(row)
++    result['columns'] = columns
++    identities = set()
++    for constraint in result['constraints']:
++        identity = (constraint['table'], constraint['name'])
++        if identity in identities:
++            raise RestoreCatalogError('duplicate_constraint_identity')
++        identities.add(identity)
++        constraint['definition'] = _constraint_tokens(constraint['definition'])
++    result['constraints'].sort(key=lambda row: (row['table'], row['name']))
++    result['server_version_num'] = 180000
++    return result
++
++
++def verify_restore_catalog(source, restored):
++    """Require equal logical schema and row hashes; return a bounded receipt."""
++    a, b = source['server_version_num'], restored['server_version_num']
++    if type(a) is not int or type(b) is not int or a // 10000 != 18 or b // 10000 != 18 or b < a:
++        raise RestoreCatalogError('unsupported_restore_server_versions')
++    left, right = _canonical(source), _canonical(restored)
++    if left != right:
++        changed = sorted(key for key in left.keys() | right.keys() if left.get(key) != right.get(key))
++        raise RestoreCatalogError('restored_logical_catalog_drift:' + ','.join(changed))
++    return {'source_server_version_num': a, 'restored_server_version_num': b,
++            'logical_catalog_equal': True, 'columns': len(source['columns']),
++            'constraints': len(source['constraints']), 'row_hashes_equal': source['rows'] == restored['rows']}

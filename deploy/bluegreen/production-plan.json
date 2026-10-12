@@ -1,0 +1,136 @@
+{
+  "status": "awaiting_explicit_user_confirmation_for_production_changes",
+  "production_changes_applied": false,
+  "requested_outage_budget_seconds": 120,
+  "target": "aiproxy.in.yunmostar.com",
+  "candidate": {
+    "version": "0.2.15-bg.1",
+    "image": "sha256:303690f16bd885b9f0ffb6153bbba85f58970ccf8052897bc40478ee980be02b",
+    "binary_sha256": "102b5cc0753ee033ddce2d0a6538dff38aa48d1964a832e3dbbfec536ae8985b",
+    "source_manifest_sha256": "9b68e5336cd1583c5fed01251b051b2fa300eeaedfe0437914c545fb685b6d4b"
+  },
+  "baseline": {
+    "blue": {
+      "name": "/sub2api",
+      "id": "840bf28b688229b4394ff110c5bdc92bbf58cf9c276fbebe9c716da69de22c51",
+      "image": "sha256:bd8e1681089feb67a4c4e4609bfe9745cc354ea1bb0a8681a18c35234416093e",
+      "started": "2026-10-12T04:01:37.919124104Z",
+      "healthy": "healthy",
+      "mounts": [
+        {
+          "Type": "bind",
+          "Source": "/home/yms/basic_services/sub2api/data",
+          "Destination": "/app/data",
+          "RW": true
+        }
+      ],
+      "network": [
+        "sub2api"
+      ]
+    },
+    "nginx": {
+      "name": "/nginx-reverse-proxy",
+      "id": "9b79d3e9599582cda206b4ace258de79695974f3386b6bd62543f475585a476f",
+      "image": "sha256:0d3b80406a13a767339fbe2f41406d6c7da727ab89cf8fae399e81f780f814d1",
+      "started": "2026-09-11T01:20:43.601947331Z",
+      "healthy": "healthy",
+      "mounts": [
+        {
+          "Type": "volume",
+          "Source": "/var/lib/docker/volumes/nginx-reverse-proxy_letsencrypt/_data",
+          "Destination": "/etc/letsencrypt",
+          "RW": false
+        },
+        {
+          "Type": "bind",
+          "Source": "/home/yms/basic_services/nginx-reverse-proxy/nginx/conf.d",
+          "Destination": "/etc/nginx/conf.d",
+          "RW": false
+        },
+        {
+          "Type": "bind",
+          "Source": "/home/yms/basic_services/nginx-reverse-proxy/nginx/snippets",
+          "Destination": "/etc/nginx/snippets",
+          "RW": false
+        },
+        {
+          "Type": "bind",
+          "Source": "/home/yms/basic_services/nginx-reverse-proxy/logs",
+          "Destination": "/var/log/nginx/audit",
+          "RW": true
+        },
+        {
+          "Type": "volume",
+          "Source": "/var/lib/docker/volumes/nginx-reverse-proxy_certbot-www/_data",
+          "Destination": "/var/www/certbot",
+          "RW": false
+        },
+        {
+          "Type": "bind",
+          "Source": "/home/yms/basic_services/nginx-reverse-proxy/default-www",
+          "Destination": "/var/www/default",
+          "RW": true
+        }
+      ],
+      "network": [
+        "claude-relay-service_default"
+      ]
+    },
+    "nginx_config_sha256": "9f129b9ef3698b92b55f1b4b1d92d0f6a6117b5da5425e52d95e6c29907ce0de",
+    "nginx_full_config_sha256": "3153431e5e1c86e389f86a3ab32532a7afd5d90ad7e5487cfa6ff6c6a8ff1abf",
+    "nginx_worker_shutdown_timeout": "unset"
+  },
+  "proposed": {
+    "bind": "172.17.0.1:18082",
+    "nginx_config_sha256": "1c131b0156c1ccf74acd18a483c409723a98890b2944ff8eddeddb8ef9b3d15f",
+    "online_migration_sha256": "0c42332e32dbab8c511772dbeb8ad2c32ecfbf6045284570e3857d191f842fb2",
+    "env_additions": {
+      "SUB2API_MULTI_INSTANCE": "true",
+      "SUB2API_BACKGROUND_JOBS_ENABLED": "false"
+    },
+    "existing_request_settings": "inherit_exactly_including_call_audit_and_billing",
+    "shared": "same_live_postgresql_and_redis_no_restore",
+    "candidate_data": "separate_new_directory; copy config/pricing/plugins/pages; exclude audit-spool/logs and plugin runtime state",
+    "periodic_job_owner": "existing_blue_instance_during_overlap",
+    "old_restart_policy": {
+      "before": "unless-stopped",
+      "during_overlap": "no",
+      "apply_only_after_confirmation": true,
+      "reason": "old binary deletes live peer Redis slots on restart",
+      "restore_condition": "green stopped after drain, or all instances upgraded with multi-instance protection"
+    }
+  },
+  "approval_required_before": [
+    "production_database_migration",
+    "candidate_connects_to_production_database_or_redis",
+    "nginx_traffic_switch",
+    "stopping_any_production_instance"
+  ],
+  "execution_after_confirmation": [
+    "Recheck live identity, configuration hashes, resource headroom and port availability; abort on drift.",
+    "Create a fresh consistent online backup and validate restoration off the serving path; keep blue serving.",
+    "Freeze administrative changes to scheduler, plugin packages, pricing and new TypeSafe/payment-bonus features during mixed-version overlap; obtain explicit scope agreement.",
+    "Apply exactly three pinned migrations in one transaction. NOWAIT table/advisory locks; bounded statements. Abort on lock or ledger drift and keep blue serving.",
+    "Before starting green, temporarily set the old instance restart policy to no without stopping it; record the original policy. Do not restart the unpatched old binary while green holds request slots. Abort if blue is unhealthy.",
+    "Prepare separate candidate writable storage and inherit production settings/secrets privately. Start pinned image on 18082 with multi-instance safety and global periodic jobs disabled.",
+    "Verify real authenticated inference, SSE, frontend assets, call-audit readiness, pricing parity, current ledger, peer slots, and shared billing; do not switch if any fails.",
+    "Produce plan-bound private runtime manifest with warmed candidate identity and approved canary files. Run the bounded handoff under a detached systemd supervisor.",
+    "Switch only the Nginx upstream using nginx -t and graceful reload; observe for 30 seconds. Revert route automatically if probes fail or the coordinator dies.",
+    "Keep blue running for existing streams, periodic jobs, and immediate route rollback. No automatic database restore and no automatic old-instance stop.",
+    "Separately review background-job ownership transfer, pending audit queues, active streams and new-feature compatibility before requesting explicit retirement approval."
+  ],
+  "handoff_time_budgets_seconds": {
+    "new_route_ready": 15,
+    "observation": 30,
+    "supervisor_margin": 10,
+    "route_rollback": 30
+  },
+  "retirement_approval": null,
+  "production_activation_approval": null,
+  "limitations": [
+    "Isolated timing is not a guarantee of production latency.",
+    "Candidate is a patched build; unmodified 0.2.15 is not safe for this overlap.",
+    "Production warm-up and online DDL remain pending explicit confirmation.",
+    "Full upgrade includes a later, separately confirmed background-worker ownership transition."
+  ]
+}
