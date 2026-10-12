@@ -1,0 +1,147 @@
+{
+  "status": "production_gateway_upgraded_old_owner_retained",
+  "version": "0.2.15-bg.1",
+  "site": "https://aiproxy.in.yunmostar.com",
+  "recorded_at_utc": "2026-10-12T14:21:30Z",
+  "operation_directory": "/var/backups/sub2api-v0215/bluegreen-20261012/activate-23b766b5653a",
+  "approved_bundle": "/var/backups/sub2api-v0215/bluegreen-20261012/rollout-87b00767056a04fa8",
+  "candidate_image": "sha256:303690f16bd885b9f0ffb6153bbba85f58970ccf8052897bc40478ee980be02b",
+  "source_manifest_sha256": "9b68e5336cd1583c5fed01251b051b2fa300eeaedfe0437914c545fb685b6d4b",
+  "binary_sha256": "102b5cc0753ee033ddce2d0a6538dff38aa48d1964a832e3dbbfec536ae8985b",
+  "candidate_compose": "/home/yms/basic_services/sub2api/bluegreen/bg102b5cc0753e/compose.json",
+  "backup": {
+    "status": "passed",
+    "restored_tables": 100,
+    "dump_sha256": "f39f5ad58855e6ff82496b217f1eecf27c1f4a35cf237e676ed8d1a56d171c63"
+  },
+  "migration": {
+    "ledger_count": 293,
+    "seconds": 0.083
+  },
+  "audit_partition_maintenance": {
+    "status": "passed",
+    "seconds": 0.077,
+    "returncode": 0,
+    "scope": "empty_next_month_partition_and_four_indexes",
+    "transactional": true,
+    "nowait": true
+  },
+  "handoff": {
+    "blue_sha256": "9f129b9ef3698b92b55f1b4b1d92d0f6a6117b5da5425e52d95e6c29907ce0de",
+    "drain_policy": "retain_blue_until_streams_finish_and_operator_confirms_retirement",
+    "green_sha256": "1c131b0156c1ccf74acd18a483c409723a98890b2944ff8eddeddb8ef9b3d15f",
+    "observation_seconds": 30.01,
+    "old_instance_stopped": false,
+    "state": "active",
+    "switch_seconds": 4.106,
+    "updated_monotonic": 2725136.283198606
+  },
+  "availability": {
+    "samples": 580,
+    "failed_samples": 1,
+    "blue_samples": 40,
+    "green_samples": 539,
+    "duration_seconds": 120.089,
+    "maximum_sample_seconds": 0.039,
+    "scope": "origin_https_health_sampled_every_200ms; not_every_customer_request",
+    "failure_first_seen_unix": 1791814578.355687,
+    "next_success_seconds": 0.202,
+    "surrounding_success_interval_seconds": 0.4,
+    "failed_probe_transport_detail": "not_recorded_by_initial_sampler; cause_unconfirmed",
+    "nginx_reload_errors": 0
+  },
+  "verification": {
+    "before_checks": {
+      "call_audit_ready": true,
+      "frontend": true,
+      "functional_inference": true,
+      "isolated_spool": true,
+      "no_new_feature_writes": true,
+      "online_backup_restore_verified": true,
+      "peer_slots_preserved": true,
+      "pricing_unchanged": true,
+      "schema_post_ledger_verified": true,
+      "single_periodic_owner": true,
+      "sse": true
+    },
+    "after_checks": {
+      "call_audit_ready": true,
+      "frontend": true,
+      "functional_inference": true,
+      "isolated_spool": true,
+      "no_new_feature_writes": true,
+      "online_backup_restore_verified": true,
+      "peer_slots_preserved": true,
+      "pricing_unchanged": true,
+      "schema_post_ledger_verified": true,
+      "single_periodic_owner": true,
+      "sse": true
+    },
+    "before_canaries": [
+      {
+        "request_id": "569d151c-a590-4a10-83cb-3e1f75e4e498",
+        "seconds": 2.118,
+        "stream": false
+      },
+      {
+        "request_id": "2c5b608c-2f5c-4ebf-b86c-4bd26a9810d2",
+        "seconds": 1.515,
+        "stream": true
+      }
+    ],
+    "after_canaries": [
+      {
+        "request_id": "9fb1d80e-e46e-4008-bfd7-492573690793",
+        "seconds": 1.374,
+        "stream": false
+      },
+      {
+        "request_id": "a650049b-e6ff-4559-80a4-fe3480401a0f",
+        "seconds": 1.856,
+        "stream": true
+      }
+    ],
+    "frontend_assets": 6,
+    "current_audit_health": {
+      "enabled": true,
+      "ready": true,
+      "schema_ready": true,
+      "storage_ready": true,
+      "dead_letter_ready": true,
+      "captured": 85,
+      "capture_failures": 0,
+      "worker_failures": 8,
+      "dead_lettered": 0,
+      "raw_capture_disabled": 0,
+      "active_sessions": 3,
+      "finalize_saturated": 0,
+      "backlog": 2,
+      "dead_letter_files": 0,
+      "oldest_pending_seconds": 3,
+      "disk_used_percent": 54,
+      "disk_available_bytes": 94276763648
+    }
+  },
+  "old_instance": {
+    "stopped": false,
+    "started": "2026-10-12T04:01:37.919124104Z",
+    "restart_policy": "no",
+    "owns_periodic_jobs": true,
+    "retirement_requires_explicit_user_confirmation": true
+  },
+  "remaining": {
+    "full_background_owner_upgrade": "pending_separate_preparation_and_stop_confirmation",
+    "old_historical_audit_dead_letters": 21,
+    "dead_letter_period": "2026-09-07 through 2026-09-14",
+    "dead_letter_error_codes": {
+      "s3_upload_failed": 18,
+      "postgres_upsert_failed": 3
+    },
+    "dead_letters_preserved": true
+  },
+  "rollback_constraints": [
+    "Route rollback retains the live database; never restore the snapshot over new writes.",
+    "Do not restart the unpatched old binary while the new instance holds shared Redis request slots.",
+    "Retain the old instance as the sole periodic-job owner until a separately reviewed ownership transition."
+  ]
+}
