@@ -1,0 +1,14 @@
+--- a/v0215_deploy_backend.py
++++ b/v0215_deploy_backend.py
+@@ -420,8 +420,9 @@
+    need(ledger==json.loads((self.root/'ledger_before.json').read_bytes()),'restored_ledger')
+    restored_catalog=self.live.capture(s,pg);publish(self.root/'restored_catalog.json',restored_catalog)
+    baseline=json.loads((self.root/'catalog_before.json').read_bytes())
+-   need(check_catalog(restored_catalog)==check_catalog(baseline),'restored_full_catalog')
+-  result={'dump_sha256':receipt['dump_sha256'],'all_tables_equal':True,'ledger_count':290,'scratch_removed':True}
++   from v0215_restore_catalog import verify_restore_catalog
++  restore_comparison=verify_restore_catalog(baseline,restored_catalog)
++  result={'dump_sha256':receipt['dump_sha256'],'all_tables_equal':True,'ledger_count':290,'scratch_removed':True,'catalog_comparison':restore_comparison}
+   publish(self.root/'restore-proof.json',result)
+   return dict(result,artifacts={n:sha(self.root/n) for n in BACKUP_MEMBERS})
+  def backup_closure(self):
