@@ -1966,7 +1966,7 @@ func TestOpenAIUserModelPolicyPricingScope(t *testing.T) {
 				case "exact_builtin":
 					svc.billingService.fallbackPrices[capModel] = &ModelPricing{InputPricePerToken: 2e-6, OutputPricePerToken: 2e-6}
 				case "diagnostic":
-					_, err := svc.calculateOpenAIRecordUsageCost(context.Background(), result, &APIKey{ID: 10}, usageBillingModelCandidates(capModel), 1.1, 1.1, 1.1, 1.1, UsageTokens{InputTokens: 20, OutputTokens: 10}, "", nil, time.Now())
+					_, err := svc.calculateOpenAIRecordUsageCost(context.Background(), result, &APIKey{ID: 10}, usageBillingModelCandidates(capModel), 1.1, 1.1, 1.1, 1.1, UsageTokens{InputTokens: 20, OutputTokens: 10}, "", nil, false, time.Now())
 					require.ErrorIs(t, err, ErrModelPricingUnavailable)
 					require.Contains(t, err.Error(), "restricted text dispatch has no same-model price")
 					expected = 0
