@@ -22,6 +22,24 @@ validation.
 - Existing recovery-window guards, group-8 bootstrap and severity thresholds are
   unchanged. No bulk policy reset is performed.
 
+### Temporary suspension of automatic Luna
+
+Optional remote `<state-dir>/config.json` contains exactly
+`{"luna_enabled": false}` to suspend automatic Luna indefinitely, until an
+operator explicitly restores `true` (no expiry). Missing config preserves the
+original enabled behavior; invalid config fails closed. The >20M Terra cap stays
+in force even above 50M. Managed users whose live policy matches stored Luna are
+relaxed to Terra, including a rerun of the already-processed hour; this preserves
+zero-window evidence and does not grant Full. Normal eight-zero-hour recovery is
+unchanged. Unmanaged/manual policy drift still aborts without writes. A pending
+Luna escalation is preserved and blocks execution for operator reconciliation;
+valid Terra relaxation journals retain normal readback and retry semantics.
+
+Install only after independent review and verification of the active API target
+and state directory. Do not overwrite an immutable old controller release or
+point the default Docker discovery at an inactive gateway. Update configuration
+atomically while holding the controller's state-directory lock.
+
 ### Model targets and channel migration
 
 The persisted/API policy name `terra` now caps rank-above-3 text models to
