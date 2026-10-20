@@ -192,3 +192,14 @@ source paths. Tests use temporary state, fake APIs, local loopback HTTP fixtures
 and bounded local subprocesses; no real deployment SSH is performed.
 
 See [TESTING.md](TESTING.md) for the recorded RED/GREEN checks.
+
+### Temporary Terra suspension
+
+The state-directory config also accepts `{"luna_enabled": true, "terra_enabled": false}`.
+Missing `terra_enabled` defaults to true. With this setting, >20M does not escalate;
+>50M still escalates to Luna. Matching controller-managed Terra users relax to Full
+unless their latest complete hour exceeds 50M (then Luna), including same-hour reruns.
+Luna retains the eight-complete-zero-hour recovery rule. Manual policy drift and
+pending Terra escalations fail closed. Do not disable both flags together; that
+combination is not supported. Restore Terra only on explicit user instruction by
+setting `terra_enabled` to true; do not restore old state snapshots.
