@@ -203,3 +203,12 @@ Luna retains the eight-complete-zero-hour recovery rule. Manual policy drift and
 pending Terra escalations fail closed. Do not disable both flags together; that
 combination is not supported. Restore Terra only on explicit user instruction by
 setting `terra_enabled` to true; do not restore old state snapshots.
+
+### Luna recovery duration
+
+`luna_recovery_hours` accepts integer 8 (backwards-compatible default) or 12.
+The active policy uses `{"luna_enabled": true, "terra_enabled": false, "luna_recovery_hours": 12}`.
+Luna requires 12 consecutive complete zero-token hours across all OpenAI keys,
+including cache tokens. Valid prior windows are retained; positive usage or missing
+hours breaks the streak. Pending recovery intents with only eight windows are rejected
+under the 12-hour setting. Terra recovery, if enabled later, remains eight hours.

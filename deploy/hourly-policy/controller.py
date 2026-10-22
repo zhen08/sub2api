@@ -52,7 +52,7 @@ def canonical_zero_window(evidence, hour):
             and evidence == window_evidence(hour, 0))
 
 
-def decide(state, hour, tokens, luna_enabled=True, terra_enabled=True):
+def decide(state, hour, tokens, luna_enabled=True, terra_enabled=True, luna_recovery_hours=8):
     if not luna_enabled and state.get('level') == 'luna':
         state = dict(state, level='terra')
     if not terra_enabled and state.get('level') == 'terra' and hour >= state.get('last', -1):
@@ -70,9 +70,10 @@ def decide(state, hour, tokens, luna_enabled=True, terra_enabled=True):
     elif level in ('terra', 'luna') and tokens == 0 and hour >= state.get('recovery_from_hour', 0):
         # Legacy low counts may include nonzero usage: evidence, not the
         # counter, is authoritative. Never synthesize missing evidence.
+        required = luna_recovery_hours if level == 'luna' else 8
         prior = state.get('low_windows')
         if state.get('last') == hour - 1 and isinstance(prior, list):
-            for evidence in reversed(prior[-7:]):
+            for evidence in reversed(prior[-(required - 1):]):
                 previous_hour = hour - len(windows) - 1
                 if (previous_hour < state.get('recovery_from_hour', 0)
                         or not canonical_zero_window(evidence, previous_hour)):
@@ -80,13 +81,13 @@ def decide(state, hour, tokens, luna_enabled=True, terra_enabled=True):
                 windows.insert(0, evidence)
         windows = windows + [window_evidence(hour, tokens)]
         low = len(windows)
-        if low == 8:
+        if low == required:
             level, low = 'full', 0
     result = dict(state, level=level, last=hour, low=low, low_windows=windows)
     return result
 
 
-def plan(users, hour, totals, keys, policies, luna_enabled=True, terra_enabled=True):
+def plan(users, hour, totals, keys, policies, luna_enabled=True, terra_enabled=True, luna_recovery_hours=8):
     import copy
     users = copy.deepcopy(users)
     by_user = {}
@@ -101,7 +102,7 @@ def plan(users, hour, totals, keys, policies, luna_enabled=True, terra_enabled=T
             raise PolicyError('user policy drift or state missing')
         if terra_enabled and old.get('level','original') == 'original' and any(k['group_id'] == 8 for k in user_keys):
             old = {'level':'terra', 'last':hour-1, 'low':0}
-        nxt = decide(old, hour, totals.get(int(uid), 0), luna_enabled=luna_enabled, terra_enabled=terra_enabled)
+        nxt = decide(old, hour, totals.get(int(uid), 0), luna_enabled=luna_enabled, terra_enabled=terra_enabled,luna_recovery_hours=luna_recovery_hours)
         terra_relaxing = not terra_enabled and old.get('level') == 'terra' and nxt['level'] == 'full'
         relaxing = not luna_enabled and old.get('level') == 'luna' and nxt['level'] in ('terra', 'full')
         if not relaxing and nxt['level'] in ('terra','luna') and nxt['level'] != old.get('level','original'):
@@ -114,7 +115,8 @@ def plan(users, hour, totals, keys, policies, luna_enabled=True, terra_enabled=T
                       'automatic_luna_suspended' if relaxing else
                       'tokens_gt_50000000' if luna_enabled and tokens > 50_000_000 else
                       'tokens_gt_20000000' if tokens > 20_000_000 else
-                      'eight_consecutive_hours_eq_0' if level == 'full' else
+                      ('twelve_consecutive_hours_eq_0' if old.get('level') == 'luna' and luna_recovery_hours == 12
+                       else 'eight_consecutive_hours_eq_0') if level == 'full' else
                       'bootstrap_group_8')
             transitions.append(dict(window_evidence(hour,tokens), user_id=int(uid),
                 **{'from':current,'to':level,'reason':reason,'low_streak':nxt.get('low_windows', [])}))
@@ -161,7 +163,7 @@ class Store:
             os.close(fd)
 
 
-def commit_plan(store, planned, read_policy, update_policy, guard=lambda: None, terra_enabled=True):
+def commit_plan(store, planned, read_policy, update_policy, guard=lambda: None, terra_enabled=True, luna_recovery_hours=8):
     guard()
     data = store.load()
     if data.get('pending') and data['pending'] != planned:
@@ -178,15 +180,16 @@ def commit_plan(store, planned, read_policy, update_policy, guard=lambda: None, 
                                   for t in planned.get('transitions', [])))
             if relaxation:
                 continue
+            required = luna_recovery_hours if op['from'] == 'luna' else 8
             hour = planned['hour']
             user = planned['users'].get(str(op['id']), {})
             evidence = user.get('low_windows')
             if (op['from'] not in ('terra', 'luna')
                     or user.get('level') != 'full' or user.get('last') != hour
-                    or hour - 7 < user.get('recovery_from_hour', 0)
-                    or not isinstance(evidence, list) or len(evidence) != 8
+                    or hour - (required - 1) < user.get('recovery_from_hour', 0)
+                    or not isinstance(evidence, list) or len(evidence) != required
                     or not all(canonical_zero_window(v, h) for v, h in
-                               zip(evidence, range(hour - 7, hour + 1)))):
+                               zip(evidence, range(hour - (required - 1), hour + 1)))):
                 raise PolicyError('invalid recovery evidence: manual reconciliation required; no writes')
     # Validate the ENTIRE write set before the first mutation.
     for op in planned['ops']:
@@ -388,7 +391,7 @@ def inventory(api):
     return {'users':safe_users,'keys':keys,'user_count':len(users),'all_key_count':key_count,'openai_key_count':len(keys)}
 
 
-def run(api, store, hour, collector=collect_usage, apply=False, collect_only=False, guard=lambda: None, luna_enabled=True, terra_enabled=True):
+def run(api, store, hour, collector=collect_usage, apply=False, collect_only=False, guard=lambda: None, luna_enabled=True, terra_enabled=True, luna_recovery_hours=8):
     guard()
     inv = inventory(api)
     usage = collector(hour)
@@ -422,11 +425,11 @@ def run(api, store, hour, collector=collect_usage, apply=False, collect_only=Fal
         if not apply:
             summary.update(status='pending_intent',pending=pending)
             return summary
-        resumed_transitions = commit_plan(store,pending,backend.read,backend.write,guard,terra_enabled=terra_enabled)
+        resumed_transitions = commit_plan(store,pending,backend.read,backend.write,guard,terra_enabled=terra_enabled,luna_recovery_hours=luna_recovery_hours)
         resumed_ops = pending['ops']
         policies = {uid:backend.read(uid) for uid in identities}
         data = store.load()
-    planned = plan(data['users'],hour,totals,inv['keys'],policies,luna_enabled=luna_enabled,terra_enabled=terra_enabled)
+    planned = plan(data['users'],hour,totals,inv['keys'],policies,luna_enabled=luna_enabled,terra_enabled=terra_enabled,luna_recovery_hours=luna_recovery_hours)
     summary['targets'] = [dict(op,user_id=op['id'],username=identities[op['id']]['username'],
                               email=identities[op['id']]['email'],keys=[k for k in inv['keys'] if k['user_id']==op['id']])
                           for op in resumed_ops + planned['ops']]
@@ -435,7 +438,7 @@ def run(api, store, hour, collector=collect_usage, apply=False, collect_only=Fal
     for target in summary['targets']:
         target.update(evidence.get(target['user_id'], {}))
     if apply:
-        commit_plan(store,planned,backend.read,backend.write,guard,terra_enabled=terra_enabled)
+        commit_plan(store,planned,backend.read,backend.write,guard,terra_enabled=terra_enabled,luna_recovery_hours=luna_recovery_hours)
     return summary
 
 
@@ -446,8 +449,11 @@ def load_policy_config(path):
         return {'luna_enabled': True, 'terra_enabled': True}
     except (OSError, ValueError):
         raise PolicyError('invalid policy configuration') from None
-    if (not isinstance(config, dict) or set(config) not in ({'luna_enabled'}, {'luna_enabled', 'terra_enabled'})
-            or any(type(value) is not bool for value in config.values())):
+    if (not isinstance(config, dict) or 'luna_enabled' not in config
+            or not set(config) <= {'luna_enabled', 'terra_enabled', 'luna_recovery_hours'}
+            or any(type(config[k]) is not bool for k in ('luna_enabled','terra_enabled') if k in config)
+            or ('luna_recovery_hours' in config and
+                (type(config['luna_recovery_hours']) is not int or config['luna_recovery_hours'] not in (8,12)))):
         raise PolicyError('invalid policy configuration')
     return dict(terra_enabled=True, **config) if 'terra_enabled' not in config else config
 
