@@ -297,7 +297,13 @@ func (s *PostgreSQLStore) UpsertCall(ctx context.Context, manifest Manifest, cap
 		errorText = captureErr.Error()
 	}
 	usage := manifest.Usage
-	_, err = s.db.ExecContext(ctx, auditUpsertCallSQL,
+	query := auditUpsertCallSQL
+	if captureStatus != CaptureStored {
+		// A crash after StoreCompleted may leave an old spool claim behind.
+		// Reconciliation and idempotent retries must not regress that commit.
+		query += " WHERE audit_calls.capture_status <> 'stored'"
+	}
+	_, err = s.db.ExecContext(ctx, query,
 		manifest.RequestID, manifest.CreatedAt, nullableTime(manifest.RequestStartedAt), nullableString(manifest.Endpoint), nullableString(manifest.Method), nullableString(string(manifest.Protocol)),
 		nullableString(manifest.APIKeyID), nullableString(manifest.APIKeyName), nullableString(manifest.UserID), nullableString(manifest.UserUsername),
 		nullableString(usage.AccountID), nullableString(usage.AccountType), nullableString(usage.Model), nullableString(string(manifest.Status)), statusCode, manifest.Stream,

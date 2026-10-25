@@ -1,4 +1,6 @@
-.PHONY: build build-backend build-frontend build-vm101-image test test-backend test-frontend test-frontend-critical test-vm101-version-contract
+.PHONY: build build-backend build-frontend build-vm101-image test test-backend test-frontend test-frontend-critical test-vm101-version-contract test-call-audit-monitoring test-call-audit-alerts
+
+PROMTOOL_IMAGE ?= prom/prometheus:v3.5.0@sha256:63805ebb8d2b3920190daf1cb14a60871b16fd38bed42b857a3182bc621f4996
 
 FRONTEND_CRITICAL_VITEST := \
 	src/i18n/__tests__/localeKeyCompleteness.spec.ts \
@@ -62,3 +64,11 @@ test-frontend-critical:
 
 test-vm101-version-contract:
 	@./deploy/tests/vm101-version-contract-test.sh
+
+test-call-audit-monitoring:
+	@python3 -m unittest discover -s deploy/call-audit-monitoring/tests
+
+test-call-audit-alerts:
+	@docker run --rm --network none --entrypoint /bin/promtool \
+		-v "$(CURDIR)/deploy/call-audit-monitoring:/work:ro" -w /work \
+		$(PROMTOOL_IMAGE) test rules tests/rules.test.yml

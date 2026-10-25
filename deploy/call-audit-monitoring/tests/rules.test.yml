@@ -1,0 +1,767 @@
+# Run with Prometheus promtool v3.5.0; all series are synthetic and carry no user labels.
+rule_files:
+- ../sub2api-call-audit.rules.yml
+evaluation_interval: 1m
+tests:
+- name: healthy full schema has no alerts
+  interval: 1m
+  input_series:
+  - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"}
+    values: 0+60x20
+  - series: sub2api_call_audit_enabled{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_ready{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_dead_letter_files{job="node",instance="basic-services"}
+    values: 0+0x20
+  - series: sub2api_call_audit_dead_letter_exhausted{job="node",instance="basic-services"}
+    values: 0+0x20
+  - series: sub2api_call_audit_dead_letter_permanent{job="node",instance="basic-services"}
+    values: 0+0x20
+  - series: sub2api_call_audit_oldest_dead_letter_seconds{job="node",instance="basic-services"}
+    values: 0+0x20
+  - series: sub2api_call_audit_capture_failures_total{job="node",instance="basic-services"}
+    values: 0+0x20
+  - series: sub2api_call_audit_backlog{job="node",instance="basic-services"}
+    values: 0+0x20
+  - series: sub2api_call_audit_oldest_pending_seconds{job="node",instance="basic-services"}
+    values: 0+0x20
+  - series: sub2api_call_audit_recovery_metrics_available{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_dead_letter_auto_retry_enabled{job="node",instance="basic-services"}
+    values: 1+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditDeadLetters",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 10m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditRetryExhausted",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 10m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditDeadLetterTooOld",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 10m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditCaptureFailures",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 10m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditBacklogTooOld",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 10m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditCollectorUnavailable",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 10m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditRecoveryMetricsMissing",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 10m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditNotReady",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 10m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditAutoRetryDisabled",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 10m
+    exp_samples: []
+- name: unresolved dead letters require five minutes
+  interval: 1m
+  input_series:
+  - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"}
+    values: 0+60x20
+  - series: sub2api_call_audit_dead_letter_files{job="node",instance="basic-services"}
+    values: 3+0x20
+  - series: sub2api_call_audit_dead_letter_exhausted{job="node",instance="basic-services"}
+    values: 0+0x20
+  - series: sub2api_call_audit_dead_letter_permanent{job="node",instance="basic-services"}
+    values: 0+0x20
+  - series: sub2api_call_audit_oldest_dead_letter_seconds{job="node",instance="basic-services"}
+    values: 0+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditDeadLetters",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 4m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditDeadLetters",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 5m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: Sub2APICallAuditDeadLetters
+    exp_alerts:
+    - exp_labels:
+        job: node
+        instance: basic-services
+        severity: warning
+      exp_annotations:
+        summary: Sub2API audit has unresolved dead letters
+        description: Dead letters have remained for 5 minutes. Inspect automatic retry state; keep original manifests and artifacts.
+- name: exhausted retry is critical
+  interval: 1m
+  input_series:
+  - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"}
+    values: 0+60x20
+  - series: sub2api_call_audit_dead_letter_exhausted{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_dead_letter_permanent{job="node",instance="basic-services"}
+    values: 0+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditRetryExhausted",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 0m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditRetryExhausted",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 1m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: Sub2APICallAuditRetryExhausted
+    exp_alerts:
+    - exp_labels:
+        job: node
+        instance: basic-services
+        severity: critical
+      exp_annotations: &id001
+        summary: Sub2API audit recovery needs intervention
+        description: At least one dead letter is permanently invalid or has exhausted automatic recovery. Do not delete its source artifacts.
+- name: permanent failure is critical
+  interval: 1m
+  input_series:
+  - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"}
+    values: 0+60x20
+  - series: sub2api_call_audit_dead_letter_exhausted{job="node",instance="basic-services"}
+    values: 0+0x20
+  - series: sub2api_call_audit_dead_letter_permanent{job="node",instance="basic-services"}
+    values: 1+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditRetryExhausted",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 1m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: Sub2APICallAuditRetryExhausted
+    exp_alerts:
+    - exp_labels:
+        job: node
+        instance: basic-services
+        severity: critical
+      exp_annotations: *id001
+- name: both permanent and exhausted produce one alert
+  interval: 1m
+  input_series:
+  - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"}
+    values: 0+60x20
+  - series: sub2api_call_audit_dead_letter_exhausted{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_dead_letter_permanent{job="node",instance="basic-services"}
+    values: 1+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditRetryExhausted",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 1m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: Sub2APICallAuditRetryExhausted
+    exp_alerts:
+    - exp_labels:
+        job: node
+        instance: basic-services
+        severity: critical
+      exp_annotations: *id001
+- name: dead letter below one hour does not page
+  interval: 1m
+  input_series:
+  - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"}
+    values: 0+60x20
+  - series: sub2api_call_audit_oldest_dead_letter_seconds{job="node",instance="basic-services"}
+    values: 3599+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditDeadLetterTooOld",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 5m
+    exp_samples: []
+- name: one hour dead letter pages after one minute
+  interval: 1m
+  input_series:
+  - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"}
+    values: 0+60x20
+  - series: sub2api_call_audit_oldest_dead_letter_seconds{job="node",instance="basic-services"}
+    values: 3600+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditDeadLetterTooOld",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 0m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditDeadLetterTooOld",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 1m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  alert_rule_test:
+  - eval_time: 1m
+    alertname: Sub2APICallAuditDeadLetterTooOld
+    exp_alerts:
+    - exp_labels:
+        job: node
+        instance: basic-services
+        severity: critical
+      exp_annotations:
+        summary: Sub2API audit dead letter is at least one hour old
+        description: Automatic recovery has not resolved an audit failure within one hour. Check storage, retries and retained source files.
+- name: capture failures increase pages immediately
+  interval: 1m
+  input_series:
+  - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"}
+    values: 0+60x20
+  - series: sub2api_call_audit_capture_failures_total{job="node",instance="basic-services"}
+    values: 0 0 1+0x18
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditCaptureFailures",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 1m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditCaptureFailures",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 2m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="Sub2APICallAuditCaptureFailures",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 13m
+    exp_samples: []
+  alert_rule_test:
+  - eval_time: 2m
+    alertname: Sub2APICallAuditCaptureFailures
+    exp_alerts:
+    - exp_labels:
+        job: node
+        instance: basic-services
+        severity: critical
+      exp_annotations: &id002
+        summary: Sub2API audit capture failures increased
+        description: New capture failures occurred in the last 10 minutes; affected requests may lack complete audit artifacts.
+- name: capture counter reset alone does not page
+  interval: 1m
+  input_series:
+  - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"}
+    values: 0+60x20
+  - series: sub2api_call_audit_capture_failures_total{job="node",instance="basic-services"}
+    values: 5 5 0+0x18
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditCaptureFailures",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 3m
+    exp_samples: []
+- name: new failure after reset still pages
+  interval: 1m
+  input_series:
+  - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"}
+    values: 0+60x20
+  - series: sub2api_call_audit_capture_failures_total{job="node",instance="basic-services"}
+    values: 5 5 0 1+0x17
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditCaptureFailures",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 3m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  alert_rule_test:
+  - eval_time: 3m
+    alertname: Sub2APICallAuditCaptureFailures
+    exp_alerts:
+    - exp_labels:
+        job: node
+        instance: basic-services
+        severity: critical
+      exp_annotations: *id002
+- name: old pending backlog requires five minutes
+  interval: 1m
+  input_series:
+  - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"}
+    values: 0+60x20
+  - series: sub2api_call_audit_backlog{job="node",instance="basic-services"}
+    values: 2+0x20
+  - series: sub2api_call_audit_oldest_pending_seconds{job="node",instance="basic-services"}
+    values: 300+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditBacklogTooOld",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 4m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditBacklogTooOld",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 5m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: Sub2APICallAuditBacklogTooOld
+    exp_alerts:
+    - exp_labels:
+        job: node
+        instance: basic-services
+        severity: warning
+      exp_annotations:
+        summary: Sub2API audit processing backlog is stalled
+        description: Pending audit work has been at least 5 minutes old for 5 minutes. Check worker progress and storage availability.
+- name: old age with empty backlog does not alert
+  interval: 1m
+  input_series:
+  - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"}
+    values: 0+60x20
+  - series: sub2api_call_audit_backlog{job="node",instance="basic-services"}
+    values: 0+0x20
+  - series: sub2api_call_audit_oldest_pending_seconds{job="node",instance="basic-services"}
+    values: 400+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditBacklogTooOld",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 10m
+    exp_samples: []
+- name: collector failure pages after two minutes
+  interval: 1m
+  input_series:
+  - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
+    values: 0+0x20
+  - series: sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"}
+    values: 0+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditCollectorUnavailable",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 1m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditCollectorUnavailable",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 2m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  alert_rule_test:
+  - eval_time: 2m
+    alertname: Sub2APICallAuditCollectorUnavailable
+    exp_alerts:
+    - exp_labels:
+        job: node
+        instance: basic-services
+        severity: critical
+      exp_annotations: &id003
+        summary: Sub2API audit monitoring is unavailable
+        description: The local health collector failed, disappeared or has no successful sample within 3 minutes. Audit health is unknown.
+- name: missing collector pages after two minutes
+  interval: 1m
+  input_series: []
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditCollectorUnavailable",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 1m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditCollectorUnavailable",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 2m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  alert_rule_test:
+  - eval_time: 2m
+    alertname: Sub2APICallAuditCollectorUnavailable
+    exp_alerts:
+    - exp_labels:
+        job: node
+        instance: basic-services
+        severity: critical
+      exp_annotations: *id003
+- name: missing success timestamp pages
+  interval: 1m
+  input_series:
+  - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
+    values: 1+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditCollectorUnavailable",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 2m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  alert_rule_test:
+  - eval_time: 2m
+    alertname: Sub2APICallAuditCollectorUnavailable
+    exp_alerts:
+    - exp_labels:
+        job: node
+        instance: basic-services
+        severity: critical
+      exp_annotations: *id003
+- name: unchanging successful output becomes stale
+  interval: 1m
+  input_series:
+  - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"}
+    values: 0+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditCollectorUnavailable",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 5m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditCollectorUnavailable",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 6m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  alert_rule_test:
+  - eval_time: 6m
+    alertname: Sub2APICallAuditCollectorUnavailable
+    exp_alerts:
+    - exp_labels:
+        job: node
+        instance: basic-services
+        severity: critical
+      exp_annotations: *id003
+- name: legacy snapshot is unknown not healthy
+  interval: 1m
+  input_series:
+  - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"}
+    values: 0+60x20
+  - series: sub2api_call_audit_enabled{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_recovery_metrics_available{job="node",instance="basic-services"}
+    values: 0+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditRecoveryMetricsMissing",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 4m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditRecoveryMetricsMissing",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 5m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="Sub2APICallAuditCollectorUnavailable",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 5m
+    exp_samples: []
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: Sub2APICallAuditRecoveryMetricsMissing
+    exp_alerts:
+    - exp_labels:
+        job: node
+        instance: basic-services
+        severity: warning
+      exp_annotations:
+        summary: Sub2API audit recovery telemetry is unavailable
+        description: The application exposes the legacy health schema. Retry classification and dead-letter age are unknown, not zero. Deploy the compatible audit runtime.
+- name: HTTP503 sample preserves degraded readiness
+  interval: 1m
+  input_series:
+  - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"}
+    values: 0+60x20
+  - series: sub2api_call_audit_enabled{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_ready{job="node",instance="basic-services"}
+    values: 0+0x20
+  - series: sub2api_call_audit_dead_letter_files{job="node",instance="basic-services"}
+    values: 0+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditNotReady",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 5m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="Sub2APICallAuditCollectorUnavailable",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 5m
+    exp_samples: []
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: Sub2APICallAuditNotReady
+    exp_alerts:
+    - exp_labels:
+        job: node
+        instance: basic-services
+        severity: warning
+      exp_annotations: &id004
+        summary: Sub2API full call audit is disabled or degraded
+        description: The application has reported disabled or degraded audit readiness for 5 minutes. Inference health alone does not prove audit health.
+- name: disabled audit is visible
+  interval: 1m
+  input_series:
+  - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"}
+    values: 0+60x20
+  - series: sub2api_call_audit_enabled{job="node",instance="basic-services"}
+    values: 0+0x20
+  - series: sub2api_call_audit_ready{job="node",instance="basic-services"}
+    values: 0+0x20
+  - series: sub2api_call_audit_dead_letter_files{job="node",instance="basic-services"}
+    values: 0+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditNotReady",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 5m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: Sub2APICallAuditNotReady
+    exp_alerts:
+    - exp_labels:
+        job: node
+        instance: basic-services
+        severity: warning
+      exp_annotations: *id004
+- name: automatic recovery disabled is visible
+  interval: 1m
+  input_series:
+  - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"}
+    values: 0+60x20
+  - series: sub2api_call_audit_enabled{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_dead_letter_auto_retry_enabled{job="node",instance="basic-services"}
+    values: 0+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditAutoRetryDisabled",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 4m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditAutoRetryDisabled",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 5m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: Sub2APICallAuditAutoRetryDisabled
+    exp_alerts:
+    - exp_labels:
+        job: node
+        instance: basic-services
+        severity: warning
+      exp_annotations:
+        summary: Sub2API audit automatic recovery is disabled
+        description: Full call audit is enabled but dead-letter automatic retry has been disabled for 5 minutes. Check the intended recovery policy.
+- name: legacy dead letters still alert without recovery fields
+  interval: 1m
+  input_series:
+  - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"}
+    values: 0+60x20
+  - series: sub2api_call_audit_enabled{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_ready{job="node",instance="basic-services"}
+    values: 0+0x20
+  - series: sub2api_call_audit_dead_letter_files{job="node",instance="basic-services"}
+    values: 1+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditDeadLetters",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 5m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="Sub2APICallAuditNotReady",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 5m
+    exp_samples: []
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: Sub2APICallAuditDeadLetters
+    exp_alerts:
+    - exp_labels:
+        job: node
+        instance: basic-services
+        severity: warning
+      exp_annotations: &id005
+        summary: Sub2API audit has unresolved dead letters
+        description: Dead letters have remained for 5 minutes. Inspect automatic retry state; keep original manifests and artifacts.
+- name: permanent dead letter suppresses general warnings
+  interval: 1m
+  input_series:
+  - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"}
+    values: 0+60x20
+  - series: sub2api_call_audit_enabled{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_ready{job="node",instance="basic-services"}
+    values: 0+0x20
+  - series: sub2api_call_audit_dead_letter_files{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_dead_letter_exhausted{job="node",instance="basic-services"}
+    values: 0+0x20
+  - series: sub2api_call_audit_dead_letter_permanent{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_oldest_dead_letter_seconds{job="node",instance="basic-services"}
+    values: 0+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditDeadLetters",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 10m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditNotReady",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 10m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditRetryExhausted",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 10m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  alert_rule_test:
+  - eval_time: 10m
+    alertname: Sub2APICallAuditRetryExhausted
+    exp_alerts:
+    - exp_labels:
+        job: node
+        instance: basic-services
+        severity: critical
+      exp_annotations: &id006
+        summary: Sub2API audit recovery needs intervention
+        description: At least one dead letter is permanently invalid or has exhausted automatic recovery. Do not delete its source artifacts.
+- name: old dead letter suppresses general warnings
+  interval: 1m
+  input_series:
+  - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"}
+    values: 0+60x20
+  - series: sub2api_call_audit_enabled{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_ready{job="node",instance="basic-services"}
+    values: 0+0x20
+  - series: sub2api_call_audit_dead_letter_files{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_dead_letter_exhausted{job="node",instance="basic-services"}
+    values: 0+0x20
+  - series: sub2api_call_audit_dead_letter_permanent{job="node",instance="basic-services"}
+    values: 0+0x20
+  - series: sub2api_call_audit_oldest_dead_letter_seconds{job="node",instance="basic-services"}
+    values: 3600+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditDeadLetters",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 10m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditNotReady",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 10m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditDeadLetterTooOld",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 10m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  alert_rule_test:
+  - eval_time: 10m
+    alertname: Sub2APICallAuditDeadLetterTooOld
+    exp_alerts:
+    - exp_labels:
+        job: node
+        instance: basic-services
+        severity: critical
+      exp_annotations:
+        summary: Sub2API audit dead letter is at least one hour old
+        description: Automatic recovery has not resolved an audit failure within one hour. Check storage, retries and retained source files.
+- name: in flight recovery suppresses duplicate readiness alert
+  interval: 1m
+  input_series:
+  - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"}
+    values: 0+60x20
+  - series: sub2api_call_audit_enabled{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_ready{job="node",instance="basic-services"}
+    values: 0+0x20
+  - series: sub2api_call_audit_dead_letter_files{job="node",instance="basic-services"}
+    values: 0+0x20
+  - series: sub2api_call_audit_dead_letter_recovering{job="node",instance="basic-services"}
+    values: 1+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditNotReady",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 10m
+    exp_samples: []
+- name: dead letter upgrades downgrades and resolves
+  interval: 1m
+  input_series:
+  - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"}
+    values: 0+60x20
+  - series: sub2api_call_audit_enabled{job="node",instance="basic-services"}
+    values: 1+0x20
+  - series: sub2api_call_audit_ready{job="node",instance="basic-services"}
+    values: 0+0x16 1+0x4
+  - series: sub2api_call_audit_dead_letter_files{job="node",instance="basic-services"}
+    values: 1+0x16 0+0x4
+  - series: sub2api_call_audit_dead_letter_exhausted{job="node",instance="basic-services"}
+    values: 0+0x5 1+0x4 0+0x10
+  - series: sub2api_call_audit_dead_letter_permanent{job="node",instance="basic-services"}
+    values: 0+0x20
+  - series: sub2api_call_audit_oldest_dead_letter_seconds{job="node",instance="basic-services"}
+    values: 0+0x20
+  promql_expr_test:
+  - expr: count(ALERTS{alertname="Sub2APICallAuditDeadLetters",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 5m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="Sub2APICallAuditDeadLetters",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 6m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditRetryExhausted",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 7m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="Sub2APICallAuditRetryExhausted",alertstate="firing",job="node",instance="basic-services",severity="critical"})
+    eval_time: 11m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditDeadLetters",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 15m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditDeadLetters",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 16m
+    exp_samples:
+    - labels: '{}'
+      value: 1
+  - expr: count(ALERTS{alertname="Sub2APICallAuditDeadLetters",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 17m
+    exp_samples: []
+  - expr: count(ALERTS{alertname="Sub2APICallAuditNotReady",alertstate="firing",job="node",instance="basic-services",severity="warning"})
+    eval_time: 20m
+    exp_samples: []
+  alert_rule_test:
+  - eval_time: 5m
+    alertname: Sub2APICallAuditDeadLetters
+    exp_alerts:
+    - exp_labels:
+        job: node
+        instance: basic-services
+        severity: warning
+      exp_annotations: *id005
+  - eval_time: 7m
+    alertname: Sub2APICallAuditRetryExhausted
+    exp_alerts:
+    - exp_labels:
+        job: node
+        instance: basic-services
+        severity: critical
+      exp_annotations: *id006
+  - eval_time: 16m
+    alertname: Sub2APICallAuditDeadLetters
+    exp_alerts:
+    - exp_labels:
+        job: node
+        instance: basic-services
+        severity: warning
+      exp_annotations: *id005

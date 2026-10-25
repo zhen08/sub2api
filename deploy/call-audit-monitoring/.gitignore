@@ -1,0 +1,5 @@
+# Root ignores directories named tests; keep this deployment package's fixtures.
+!tests/
+!tests/**
+__pycache__/
+*.pyc

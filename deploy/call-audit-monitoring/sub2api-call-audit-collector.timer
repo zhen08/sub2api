@@ -1,0 +1,11 @@
+[Unit]
+Description=Check Sub2API Call Audit every minute
+
+[Timer]
+OnBootSec=30s
+OnUnitActiveSec=60s
+AccuracySec=5s
+Unit=sub2api-call-audit-collector.service
+
+[Install]
+WantedBy=timers.target

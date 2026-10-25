@@ -13,7 +13,7 @@ The writer keeps the existing `audit_calls` and `audit_artifacts` schema and the
 
 S3 metadata remains `request-id` and `artifact-kind`. Point `CALL_AUDIT_POSTGRES_URL` and the S3 settings at the existing audit database/bucket; no historical copy is required.
 
-Each application replica owns `/app/data/audit-spool` and consumes only its own manifests. The directory must be a persistent volume. Redis is not involved. Inference remains available if PostgreSQL/S3 is down; manifests retry locally and move to `dead-letter/` after five attempts.
+Each application replica owns `/app/data/audit-spool` and consumes only its own manifests. The directory must be a persistent volume. Redis is not involved. Inference remains available if PostgreSQL/S3 is down; manifests retry locally and move to `dead-letter/` after five attempts. Retryable dead letters then receive a separate, bounded slow-retry budget; permanent failures remain visible for operator intervention.
 
 The S3 writer identity only needs `s3:PutObject` for the configured prefix. It does not need `GetObject` or `ListBucket`; the query sidecar uses a separate read-only identity. The PostgreSQL writer keeps logical artifacts unique by `(request_id, kind, sequence)`, preserving the oldest externally visible artifact ID across retries.
 
@@ -88,6 +88,62 @@ available, `capture_failures`/backlog/oldest age/disk waterline/dead-letter
 change as expected, and the persistent spool drains after recovery.
 
 Legacy client prefixes are direct aliases: `/api/v1`, `/claude/v1`, `/openai/v1`, `/antigravity/api/v1`, and `/gemini-cli/api/v1`. They reuse the canonical handlers and create one audit call per inbound request.
+
+## Dead-letter recovery and alerts
+
+With capture and the local worker enabled, dead-letter recovery is enabled by
+default. The first slow retry is due 15 minutes after failure, then the delay
+doubles up to six hours. A bundle receives at most 12 slow attempts, with at most
+two due bundles processed per worker pass. Normal ready/retry work retains its
+own batch budget. The retry count and failure timestamps are persisted in the
+manifest, so a process restart does not renew the retry allowance.
+
+Slow retries share the sequential audit worker. Each attempt's storage work is
+limited to 30 seconds (or the shorter claim timeout), with separate bounded
+failed-status synchronization. A default historical batch can therefore delay
+the next audit batch by about a minute when storage times out. Inference remains
+nonblocking; use the pending-age alert to detect delayed audit persistence.
+
+Recovery writes only the existing audit PostgreSQL/S3 records. It retains the
+original request ID, timestamps, identity, usage and artifact bytes; it does
+not reissue inference or apply business billing. Missing, malformed or unsafe
+local artifacts and permanent processing errors remain dead letters. Existing
+manifests without the new retry fields are eligible only for recognized
+retryable failure codes, after their local bundle has been validated. Keep a
+private backup before any manual repair; successful processing removes the
+original local spool bundle after durable storage completes.
+
+The worker owns failed-status reconciliation and slow retries in one execution
+sequence. A separate maintenance scan cannot overwrite a successfully stored
+call as failed. A dead letter being recovered still makes audit readiness
+degraded until its durable commit finishes. Exhausted and permanent records
+remain unhealthy until repaired; neither the recovery worker nor alerts delete
+them to clear the health status.
+
+Configuration is under `call_audit.worker.dead_letter_retry`:
+
+| Environment variable | Default | Meaning |
+| --- | --- | --- |
+| `CALL_AUDIT_DEAD_LETTER_RETRY_ENABLED` | `true` | Enable slow recovery when the worker is enabled |
+| `CALL_AUDIT_DEAD_LETTER_MAX_RETRIES` | `12` | Maximum slow attempts per bundle, 1–100 |
+| `CALL_AUDIT_DEAD_LETTER_BATCH_SIZE` | `2` | Maximum slow attempts per pass, 1–100 |
+| `CALL_AUDIT_DEAD_LETTER_INITIAL_DELAY_SECONDS` | `900` | Delay before the first slow attempt |
+| `CALL_AUDIT_DEAD_LETTER_MAX_DELAY_SECONDS` | `21600` | Maximum delay; must be at least the initial delay and at most seven days |
+
+The authenticated `/api/v1/admin/call-audit/health` snapshot includes pending,
+recovering, retryable, permanent and exhausted counts, the oldest unresolved
+dead-letter age, and slow-attempt/recovery counters. Counters are process-local;
+per-bundle retry limits and ages survive restarts. An old failed counter does
+not prevent readiness from recovering after the underlying problem is fixed.
+
+[VM101 monitoring integration](../deploy/call-audit-monitoring/README.md)
+exports this snapshot through the existing node_exporter textfile collector
+and provides Prometheus rules for persistent dead letters, exhausted/permanent
+records, aging backlog, capture failures and a missing or failed collector.
+The collector accepts a valid HTTP 503 health snapshot as a successful sample
+with degraded readiness. It never exports admin credentials, request IDs,
+usernames or artifact contents. Install the collector **and** load its rules;
+application retry behavior alone does not deliver notifications.
 
 The CRS self-service reads `/api/v1/key-info`, `/api/v1/me`, and
 `/api/v1/organizations/:org_id/usage` are not contract-compatible with

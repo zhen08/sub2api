@@ -16,25 +16,33 @@ import (
 )
 
 type RuntimeSnapshot struct {
-	Enabled              bool   `json:"enabled"`
-	Ready                bool   `json:"ready"`
-	SchemaReady          bool   `json:"schema_ready"`
-	StorageReady         bool   `json:"storage_ready"`
-	DeadLetterReady      bool   `json:"dead_letter_ready"`
-	ReadinessError       string `json:"readiness_error,omitempty"`
-	Captured             uint64 `json:"captured"`
-	CaptureFailures      uint64 `json:"capture_failures"`
-	WorkerFailures       uint64 `json:"worker_failures"`
-	DeadLettered         uint64 `json:"dead_lettered"`
-	RawCaptureDisabled   uint64 `json:"raw_capture_disabled"`
-	ActiveSessions       int64  `json:"active_sessions"`
-	FinalizeSaturated    uint64 `json:"finalize_saturated"`
-	Initialization       string `json:"initialization_error,omitempty"`
-	Backlog              int    `json:"backlog"`
-	DeadLetterFiles      int    `json:"dead_letter_files"`
-	OldestPendingSeconds int64  `json:"oldest_pending_seconds"`
-	DiskUsedPercent      int    `json:"disk_used_percent"`
-	DiskAvailableBytes   uint64 `json:"disk_available_bytes"`
+	Enabled                    bool   `json:"enabled"`
+	Ready                      bool   `json:"ready"`
+	SchemaReady                bool   `json:"schema_ready"`
+	StorageReady               bool   `json:"storage_ready"`
+	DeadLetterReady            bool   `json:"dead_letter_ready"`
+	ReadinessError             string `json:"readiness_error,omitempty"`
+	Captured                   uint64 `json:"captured"`
+	CaptureFailures            uint64 `json:"capture_failures"`
+	WorkerFailures             uint64 `json:"worker_failures"`
+	DeadLettered               uint64 `json:"dead_lettered"`
+	RawCaptureDisabled         uint64 `json:"raw_capture_disabled"`
+	ActiveSessions             int64  `json:"active_sessions"`
+	FinalizeSaturated          uint64 `json:"finalize_saturated"`
+	Initialization             string `json:"initialization_error,omitempty"`
+	Backlog                    int    `json:"backlog"`
+	DeadLetterFiles            int    `json:"dead_letter_files"`
+	OldestPendingSeconds       int64  `json:"oldest_pending_seconds"`
+	DiskUsedPercent            int    `json:"disk_used_percent"`
+	DiskAvailableBytes         uint64 `json:"disk_available_bytes"`
+	DeadLetterRecovering       int    `json:"dead_letter_recovering"`
+	DeadLetterRetryable        int    `json:"dead_letter_retryable"`
+	DeadLetterExhausted        int    `json:"dead_letter_exhausted"`
+	DeadLetterPermanent        int    `json:"dead_letter_permanent"`
+	OldestDeadLetterSeconds    int64  `json:"oldest_dead_letter_seconds"`
+	DeadLetterAutoRetryEnabled bool   `json:"dead_letter_auto_retry_enabled"`
+	DeadLetterRetriesTotal     uint64 `json:"dead_letter_retries_total"`
+	DeadLetterRecoveredTotal   uint64 `json:"dead_letter_recovered_total"`
 }
 
 const (
@@ -62,27 +70,30 @@ type Runtime struct {
 	done            chan struct{}
 	maintenanceDone chan struct{}
 
-	initErr             error
-	captured            atomic.Uint64
-	captureFailures     atomic.Uint64
-	workerFailures      atomic.Uint64
-	deadLettered        atomic.Uint64
-	rawCaptureDisabled  atomic.Uint64
-	activeSessions      atomic.Int64
-	finalizeSaturated   atomic.Uint64
-	schemaReady         atomic.Bool
-	storageReady        atomic.Bool
-	deadLetterReady     atomic.Bool
-	readinessMu         sync.RWMutex
-	schemaReadinessErr  string
-	storageReadinessErr string
-	deadLetterErr       string
-	closeOnce           sync.Once
-	finalizeMu          sync.Mutex
-	finalizeWG          sync.WaitGroup
-	finalizeSlots       chan struct{}
-	sessionWG           sync.WaitGroup
-	closing             bool
+	initErr                  error
+	captured                 atomic.Uint64
+	captureFailures          atomic.Uint64
+	workerFailures           atomic.Uint64
+	deadLettered             atomic.Uint64
+	rawCaptureDisabled       atomic.Uint64
+	activeSessions           atomic.Int64
+	finalizeSaturated        atomic.Uint64
+	deadLetterRetriesTotal   atomic.Uint64
+	deadLetterRecoveredTotal atomic.Uint64
+	schemaReady              atomic.Bool
+	storageReady             atomic.Bool
+	deadLetterReady          atomic.Bool
+	readinessMu              sync.RWMutex
+	schemaReadinessErr       string
+	storageReadinessErr      string
+	deadLetterErr            string
+	deadLetterStatus         DeadLetterSnapshot
+	closeOnce                sync.Once
+	finalizeMu               sync.Mutex
+	finalizeWG               sync.WaitGroup
+	finalizeSlots            chan struct{}
+	sessionWG                sync.WaitGroup
+	closing                  bool
 }
 
 // NewRuntime intentionally returns a degraded Runtime instead of failing the
@@ -159,6 +170,12 @@ func NewRuntime(cfg *config.Config) *Runtime {
 			RetryInitialDelay: time.Duration(runtime.cfg.Worker.RetryInitialDelayMS) * time.Millisecond,
 			RetryMaxDelay:     time.Duration(runtime.cfg.Worker.RetryMaxDelayMS) * time.Millisecond,
 			ClaimTimeout:      time.Duration(runtime.cfg.Worker.ClaimTimeoutSeconds) * time.Second,
+			DeadLetterRetry:   runtime.deadLetterRetryOptions(),
+			OnDeadLetterState: runtime.setDeadLetterSnapshot,
+			OnDeadLetterRetry: func(Manifest) { runtime.deadLetterRetriesTotal.Add(1) },
+			SyncDeadLetter: func(ctx context.Context, manifest Manifest, processErr error) error {
+				return store.UpsertCall(ctx, manifest, CaptureFailed, processErr)
+			},
 			OnError: func(processErr error) {
 				runtime.workerFailures.Add(1)
 				runtime.setStorageReadiness(false, processErr)
@@ -167,15 +184,11 @@ func NewRuntime(cfg *config.Config) *Runtime {
 			OnDeadLetter: func(manifest Manifest, processErr error) {
 				runtime.deadLettered.Add(1)
 				runtime.setDeadLetterReadiness(false, errDeadLettersPresent)
-				markCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-				defer cancel()
-				if err := store.UpsertCall(markCtx, manifest, CaptureFailed, processErr); err != nil {
-					runtime.workerFailures.Add(1)
-					runtime.setStorageReadiness(false, err)
-					slog.Warn("call audit dead-letter status deferred", "request_id", manifest.RequestID, "error", safeStorageReadinessError(err))
-				}
 			},
-			OnSuccess: func(Manifest) {
+			OnSuccess: func(manifest Manifest) {
+				if manifest.DeadLetterRetries > 0 {
+					runtime.deadLetterRecoveredTotal.Add(1)
+				}
 				runtime.setStorageReadiness(true, nil)
 			},
 		})
@@ -246,38 +259,38 @@ func (r *Runtime) readinessMaintenance() {
 	}
 }
 
+// reconcileDeadLetters is read-only and only needed when no worker runs. The
+// worker exclusively publishes state while it owns lifecycle/status writes.
 func (r *Runtime) reconcileDeadLetters() {
-	if r == nil || r.store == nil || r.spool == nil || r.ctx == nil {
+	if r == nil || r.spool == nil || r.worker != nil {
 		return
 	}
-	paths, err := r.spool.listManifestPaths(spoolDeadDir)
-	if err != nil {
-		r.workerFailures.Add(1)
-		r.setDeadLetterReadiness(false, err)
-		return
-	}
-	if len(paths) == 0 {
-		r.setDeadLetterReadiness(true, nil)
-		return
-	}
-	r.setDeadLetterReadiness(false, errDeadLettersPresent)
-	for _, path := range paths {
-		manifest, loadErr := r.spool.LoadManifest(path)
-		if loadErr != nil || strings.TrimSpace(manifest.RequestID) == "" {
-			continue
-		}
-		message := errors.New("audit capture failed")
-		if manifest.LastErrorCode != "" {
-			message = fmt.Errorf("audit capture failed: %s", manifest.LastErrorCode)
-		}
-		ctx, cancel := context.WithTimeout(r.ctx, 5*time.Second)
-		err = r.store.UpsertCall(ctx, manifest, CaptureFailed, message)
-		cancel()
-		if err != nil && !errors.Is(err, context.Canceled) {
-			r.workerFailures.Add(1)
-			r.setStorageReadiness(false, err)
-			return
-		}
+	r.spool.workerMu.Lock()
+	defer r.spool.workerMu.Unlock()
+	r.setDeadLetterSnapshot(r.spool.deadLetterSnapshot(time.Now().UTC(), r.deadLetterRetryOptions()))
+}
+
+func (r *Runtime) deadLetterRetryOptions() DeadLetterRetryOptions {
+	cfg := r.cfg.Worker.DeadLetterRetry
+	return DeadLetterRetryOptions{Enabled: r.cfg.Worker.Enabled && cfg.Enabled,
+		MaxRetries: cfg.MaxRetries, BatchSize: cfg.BatchSize,
+		InitialDelay: time.Duration(cfg.InitialDelaySeconds) * time.Second,
+		MaxDelay:     time.Duration(cfg.MaxDelaySeconds) * time.Second}
+}
+
+func (r *Runtime) setDeadLetterSnapshot(snapshot DeadLetterSnapshot) {
+	r.readinessMu.Lock()
+	defer r.readinessMu.Unlock()
+	r.deadLetterStatus = snapshot
+	ready := !snapshot.ScanFailed && snapshot.unresolved() == 0
+	r.deadLetterReady.Store(ready)
+	switch {
+	case snapshot.ScanFailed:
+		r.deadLetterErr = "audit dead-letter scan failed"
+	case !ready:
+		r.deadLetterErr = "audit dead letters require attention"
+	default:
+		r.deadLetterErr = ""
 	}
 }
 
@@ -330,9 +343,9 @@ func (r *Runtime) setDeadLetterReadiness(ready bool, cause error) {
 	r.readinessMu.Unlock()
 }
 
-func (r *Runtime) readinessSnapshot() (schemaReady, storageReady, deadLetterReady bool, diagnostic string) {
+func (r *Runtime) readinessSnapshot() (schemaReady, storageReady, deadLetterReady bool, diagnostic string, deadLetters DeadLetterSnapshot) {
 	if r == nil {
-		return false, false, false, ""
+		return false, false, false, "", DeadLetterSnapshot{}
 	}
 	r.readinessMu.RLock()
 	defer r.readinessMu.RUnlock()
@@ -354,7 +367,7 @@ func (r *Runtime) readinessSnapshot() (schemaReady, storageReady, deadLetterRead
 	appendIssue(schemaReady, r.schemaReadinessErr)
 	appendIssue(storageReady, r.storageReadinessErr)
 	appendIssue(deadLetterReady, r.deadLetterErr)
-	return schemaReady, storageReady, deadLetterReady, strings.Join(issues, "; ")
+	return schemaReady, storageReady, deadLetterReady, strings.Join(issues, "; "), r.deadLetterStatus
 }
 
 // safeStorageReadinessError intentionally returns only stable, non-secret
@@ -547,21 +560,29 @@ func (r *Runtime) Snapshot() RuntimeSnapshot {
 	if r == nil {
 		return RuntimeSnapshot{}
 	}
-	schemaReady, storageReady, deadLetterReady, readinessError := r.readinessSnapshot()
+	schemaReady, storageReady, deadLetterReady, readinessError, deadLetters := r.readinessSnapshot()
 	snapshot := RuntimeSnapshot{
-		Enabled:            r.cfg.Enabled,
-		Ready:              r.cfg.Enabled && r.initErr == nil && r.spool != nil && schemaReady && storageReady && deadLetterReady,
-		SchemaReady:        schemaReady,
-		StorageReady:       storageReady,
-		DeadLetterReady:    deadLetterReady,
-		ReadinessError:     readinessError,
-		Captured:           r.captured.Load(),
-		CaptureFailures:    r.captureFailures.Load(),
-		WorkerFailures:     r.workerFailures.Load(),
-		DeadLettered:       r.deadLettered.Load(),
-		RawCaptureDisabled: r.rawCaptureDisabled.Load(),
-		ActiveSessions:     r.activeSessions.Load(),
-		FinalizeSaturated:  r.finalizeSaturated.Load(),
+		Enabled:                    r.cfg.Enabled,
+		Ready:                      r.cfg.Enabled && r.initErr == nil && r.spool != nil && schemaReady && storageReady && deadLetterReady,
+		SchemaReady:                schemaReady,
+		StorageReady:               storageReady,
+		DeadLetterReady:            deadLetterReady,
+		ReadinessError:             readinessError,
+		Captured:                   r.captured.Load(),
+		CaptureFailures:            r.captureFailures.Load(),
+		WorkerFailures:             r.workerFailures.Load(),
+		DeadLettered:               r.deadLettered.Load(),
+		RawCaptureDisabled:         r.rawCaptureDisabled.Load(),
+		ActiveSessions:             r.activeSessions.Load(),
+		FinalizeSaturated:          r.finalizeSaturated.Load(),
+		DeadLetterRecovering:       deadLetters.Recovering,
+		DeadLetterRetryable:        deadLetters.Retryable,
+		DeadLetterExhausted:        deadLetters.Exhausted,
+		DeadLetterPermanent:        deadLetters.Permanent,
+		OldestDeadLetterSeconds:    deadLetters.OldestSeconds,
+		DeadLetterAutoRetryEnabled: deadLetters.AutoRetryEnabled,
+		DeadLetterRetriesTotal:     r.deadLetterRetriesTotal.Load(),
+		DeadLetterRecoveredTotal:   r.deadLetterRecoveredTotal.Load(),
 	}
 	if r != nil && r.initErr != nil {
 		snapshot.Initialization = r.initErr.Error()

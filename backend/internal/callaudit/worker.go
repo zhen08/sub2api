@@ -56,6 +56,12 @@ type WorkerOptions struct {
 	OnError           func(error)
 	OnDeadLetter      func(Manifest, error)
 	OnSuccess         func(Manifest)
+	DeadLetterRetry   DeadLetterRetryOptions
+	OnDeadLetterState func(DeadLetterSnapshot)
+	OnDeadLetterRetry func(Manifest)
+	// SyncDeadLetter runs only under the worker's ownership of the spool. It
+	// must never be called by a separate runtime maintenance goroutine.
+	SyncDeadLetter func(context.Context, Manifest, error) error
 }
 
 type WorkerStats struct {
@@ -68,9 +74,13 @@ type WorkerStats struct {
 }
 
 type Worker struct {
-	spool     *Spool
-	processor ManifestProcessor
-	options   WorkerOptions
+	spool                   *Spool
+	processor               ManifestProcessor
+	options                 WorkerOptions
+	deadLetterSynced        map[string]time.Time
+	nextDeadLetterScan      time.Time
+	nextDeadLetterSnapshot  time.Time
+	deadLetterSnapshotDirty bool
 }
 
 func NewWorker(spool *Spool, processor ManifestProcessor, options WorkerOptions) (*Worker, error) {
@@ -87,6 +97,11 @@ func NewWorker(spool *Spool, processor ManifestProcessor, options WorkerOptions)
 	if options.RetryMaxDelay < options.RetryInitialDelay {
 		return nil, fmt.Errorf("audit retry maximum delay must be >= initial delay")
 	}
+	if options.DeadLetterRetry.Enabled && (options.DeadLetterRetry.MaxRetries <= 0 ||
+		options.DeadLetterRetry.BatchSize <= 0 || options.DeadLetterRetry.InitialDelay <= 0 ||
+		options.DeadLetterRetry.MaxDelay < options.DeadLetterRetry.InitialDelay) {
+		return nil, fmt.Errorf("audit dead-letter retry options must be positive and bounded")
+	}
 	if options.Now == nil {
 		options.Now = time.Now
 	}
@@ -99,7 +114,13 @@ func NewWorker(spool *Spool, processor ManifestProcessor, options WorkerOptions)
 	if options.OnSuccess == nil {
 		options.OnSuccess = func(Manifest) {}
 	}
-	return &Worker{spool: spool, processor: processor, options: options}, nil
+	if options.OnDeadLetterState == nil {
+		options.OnDeadLetterState = func(DeadLetterSnapshot) {}
+	}
+	if options.OnDeadLetterRetry == nil {
+		options.OnDeadLetterRetry = func(Manifest) {}
+	}
+	return &Worker{spool: spool, processor: processor, options: options, deadLetterSynced: make(map[string]time.Time)}, nil
 }
 
 func (w *Worker) Run(ctx context.Context) error {
@@ -121,10 +142,14 @@ func (w *Worker) Run(ctx context.Context) error {
 }
 
 func (w *Worker) ProcessOnce(ctx context.Context) (WorkerStats, error) {
+	w.spool.workerMu.Lock()
+	defer w.spool.workerMu.Unlock()
 	if ctx == nil {
 		ctx = context.Background()
 	}
 	now := w.options.Now().UTC()
+	w.publishDeadLetterSnapshot(now)
+	defer func() { w.publishDeadLetterSnapshot(w.options.Now().UTC()) }()
 	stats := WorkerStats{}
 	var joined error
 	if recovered, err := w.recoverStale(now); err != nil {
@@ -159,10 +184,21 @@ func (w *Worker) ProcessOnce(ctx context.Context) (WorkerStats, error) {
 		stats.Retried += result.Retried
 		stats.DeadLettered += result.DeadLettered
 	}
+	// Live traffic always gets its own batch before the separately bounded
+	// historical work. A dead letter receives one attempt, never a fast burst.
+	deadStats, deadErr := w.processDeadLetters(ctx, now)
+	stats.Claimed += deadStats.Claimed
+	stats.Succeeded += deadStats.Succeeded
+	stats.DeadLettered += deadStats.DeadLettered
+	joined = errors.Join(joined, deadErr)
 	return stats, joined
 }
 
-type manifestCandidate struct{ path string }
+type manifestCandidate struct {
+	path         string
+	deadLetter   bool
+	preflightErr error
+}
 
 func (w *Worker) candidates(now time.Time) ([]manifestCandidate, error) {
 	ready, err := w.spool.listManifestPaths(spoolReadyDir)
@@ -189,6 +225,11 @@ func (w *Worker) candidates(now time.Time) ([]manifestCandidate, error) {
 func (w *Worker) processCandidate(ctx context.Context, candidate manifestCandidate, now time.Time) (WorkerStats, error) {
 	stats := WorkerStats{}
 	processingPath := filepath.Join(w.spool.root, spoolProcessingDir, filepath.Base(candidate.path))
+	if _, err := os.Lstat(processingPath); err == nil {
+		return stats, fmt.Errorf("audit processing claim already exists")
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return stats, err
+	}
 	if err := renameDurable(candidate.path, processingPath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
 			return stats, nil
@@ -207,11 +248,28 @@ func (w *Worker) processCandidate(ctx context.Context, candidate manifestCandida
 	manifest.State = ManifestProcessing
 	manifest.ClaimedAt = timePointer(now)
 	manifest.EventSpoolPath = w.relative(processingPath)
+	if candidate.deadLetter {
+		w.deadLetterSnapshotDirty = true
+		manifest.DeadLetterRetries++
+		manifest.CaptureStatus = CaptureRetrying
+		manifest.NextAttemptAt = nil
+	}
 	if err := w.writeManifest(processingPath, manifest); err != nil {
 		return stats, err
 	}
+	if candidate.deadLetter {
+		w.options.OnDeadLetterRetry(manifest)
+		w.publishDeadLetterSnapshot(now)
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, min(w.options.ClaimTimeout, 30*time.Second))
+		defer cancel()
+	}
 
-	if err := w.processor.Process(ctx, manifest); err != nil {
+	processErr := candidate.preflightErr
+	if processErr == nil {
+		processErr = w.processor.Process(ctx, manifest)
+	}
+	if err := processErr; err != nil {
 		// Processing failures are relevant to runtime storage health even when the
 		// durable retry/dead-letter transition itself succeeds. Report them here;
 		// ProcessOnce only reports transition errors returned below.
@@ -225,6 +283,10 @@ func (w *Worker) processCandidate(ctx context.Context, candidate manifestCandida
 		return stats, err
 	}
 	w.options.OnSuccess(manifest)
+	if manifest.DeadLetterRetries > 0 {
+		w.deadLetterSnapshotDirty = true
+	}
+	delete(w.deadLetterSynced, filepath.Base(processingPath))
 	stats.Succeeded = 1
 	return stats, nil
 }
@@ -235,11 +297,19 @@ func (w *Worker) transitionFailure(processingPath string, manifest Manifest, pro
 	manifest.LastAttemptAt = timePointer(now)
 	manifest.ClaimedAt = nil
 	manifest.LastErrorCode = code
-	if !retryable || manifest.Attempts >= w.options.MaxAttempts {
+	manifest.LastFailureRetryable = &retryable
+	if !retryable || manifest.Attempts >= w.options.MaxAttempts || manifest.DeadLetterRetries > 0 {
+		w.deadLetterSnapshotDirty = true
 		manifest.State = ManifestDeadLetter
 		manifest.CaptureStatus = CaptureFailed
 		manifest.FailedAt = timePointer(now)
+		if manifest.FirstFailedAt == nil {
+			manifest.FirstFailedAt = timePointer(now)
+		}
 		manifest.NextAttemptAt = nil
+		if retryable && w.canRetryDeadLetter(manifest) {
+			manifest.NextAttemptAt = timePointer(now.Add(w.deadLetterDelay(manifest.DeadLetterRetries)))
+		}
 		target := filepath.Join(w.spool.root, spoolDeadDir, filepath.Base(processingPath))
 		manifest.EventSpoolPath = w.relative(target)
 		if err := w.writeManifest(processingPath, manifest); err != nil {
@@ -249,6 +319,7 @@ func (w *Worker) transitionFailure(processingPath string, manifest Manifest, pro
 			return false, false, fmt.Errorf("move audit manifest to dead letter: %w", err)
 		}
 		w.options.OnDeadLetter(manifest, processErr)
+		w.syncDeadLetter(context.Background(), manifest, now)
 		return false, true, nil
 	}
 
@@ -309,6 +380,18 @@ func (w *Worker) recoverStale(now time.Time) (int, error) {
 			joined = errors.Join(joined, loadErr, w.quarantineCorrupt(path))
 			continue
 		}
+		// Completion is durable before cleanup. A crash in that window only
+		// needs local cleanup, even if the final slow attempt spent its budget.
+		if manifest.CaptureStatus == CaptureStored {
+			if err := w.complete(path, manifest); err != nil {
+				joined = errors.Join(joined, err)
+				continue
+			}
+			w.options.OnSuccess(manifest)
+			w.deadLetterSnapshotDirty = true
+			recovered++
+			continue
+		}
 		_, _, transitionErr := w.transitionFailure(path, manifest, Retryable("claim_expired", errors.New("audit worker claim expired")), now)
 		if transitionErr != nil {
 			joined = errors.Join(joined, transitionErr)
@@ -340,12 +423,15 @@ func (w *Worker) cleanupCompleted() (int, error) {
 			joined = errors.Join(joined, removeErr)
 			continue
 		}
+		w.options.OnSuccess(manifest)
+		w.deadLetterSnapshotDirty = true
 		cleaned++
 	}
 	return cleaned, joined
 }
 
 func (w *Worker) quarantineCorrupt(path string) error {
+	w.deadLetterSnapshotDirty = true
 	target := filepath.Join(w.spool.root, spoolDeadDir, filepath.Base(path))
 	if err := renameDurable(path, target); err != nil {
 		return fmt.Errorf("quarantine corrupt audit manifest: %w", err)
@@ -354,6 +440,13 @@ func (w *Worker) quarantineCorrupt(path string) error {
 }
 
 func renameDurable(source, target string) error {
+	// All queue transitions share the spool owner lock. Never replace another
+	// durable bundle when stale/colliding queue entries need manual inspection.
+	if _, err := os.Lstat(target); err == nil {
+		return fmt.Errorf("audit queue target already exists: %w", os.ErrExist)
+	} else if !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
 	if err := os.Rename(source, target); err != nil {
 		return err
 	}

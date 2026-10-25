@@ -61,3 +61,76 @@ func TestLoadCallAuditRejectsUnimplementedRetentionDeletion(t *testing.T) {
 		t.Fatal("retention deletion must remain gated until the dry-run rollout is approved")
 	}
 }
+
+func TestLoadCallAuditDeadLetterRetryDefaults(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := cfg.CallAudit.Worker.DeadLetterRetry
+	if !got.Enabled || got.MaxRetries != 12 || got.BatchSize != 2 || got.InitialDelaySeconds != 900 || got.MaxDelaySeconds != 21600 {
+		t.Fatalf("dead-letter retry defaults = %+v", got)
+	}
+}
+
+func TestLoadCallAuditDeadLetterRetryEnvironment(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("CALL_AUDIT_ENABLED", "true")
+	t.Setenv("CALL_AUDIT_DEAD_LETTER_RETRY_ENABLED", "true")
+	t.Setenv("CALL_AUDIT_DEAD_LETTER_MAX_RETRIES", "8")
+	t.Setenv("CALL_AUDIT_DEAD_LETTER_BATCH_SIZE", "3")
+	t.Setenv("CALL_AUDIT_DEAD_LETTER_INITIAL_DELAY_SECONDS", "1200")
+	t.Setenv("CALL_AUDIT_DEAD_LETTER_MAX_DELAY_SECONDS", "7200")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := cfg.CallAudit.Worker.DeadLetterRetry
+	if !got.Enabled || got.MaxRetries != 8 || got.BatchSize != 3 || got.InitialDelaySeconds != 1200 || got.MaxDelaySeconds != 7200 {
+		t.Fatalf("dead-letter retry environment = %+v", got)
+	}
+}
+
+func TestLoadCallAuditRejectsUnboundedDeadLetterRetry(t *testing.T) {
+	cases := []struct {
+		name string
+		env  map[string]string
+	}{
+		{"zero retries", map[string]string{"CALL_AUDIT_DEAD_LETTER_MAX_RETRIES": "0"}},
+		{"negative retries", map[string]string{"CALL_AUDIT_DEAD_LETTER_MAX_RETRIES": "-1"}},
+		{"excessive retries", map[string]string{"CALL_AUDIT_DEAD_LETTER_MAX_RETRIES": "101"}},
+		{"empty batch", map[string]string{"CALL_AUDIT_DEAD_LETTER_BATCH_SIZE": "0"}},
+		{"excessive batch", map[string]string{"CALL_AUDIT_DEAD_LETTER_BATCH_SIZE": "101"}},
+		{"zero delay", map[string]string{"CALL_AUDIT_DEAD_LETTER_INITIAL_DELAY_SECONDS": "0"}},
+		{"inverted delays", map[string]string{"CALL_AUDIT_DEAD_LETTER_INITIAL_DELAY_SECONDS": "3600", "CALL_AUDIT_DEAD_LETTER_MAX_DELAY_SECONDS": "1800"}},
+		{"excessive delay", map[string]string{"CALL_AUDIT_DEAD_LETTER_MAX_DELAY_SECONDS": "604801"}},
+	}
+	for _, test := range cases {
+		t.Run(test.name, func(t *testing.T) {
+			resetViperWithJWTSecret(t)
+			t.Setenv("CALL_AUDIT_ENABLED", "true")
+			t.Setenv("CALL_AUDIT_DEAD_LETTER_RETRY_ENABLED", "true")
+			for name, value := range test.env {
+				t.Setenv(name, value)
+			}
+			if _, err := Load(); err == nil {
+				t.Fatal("invalid dead-letter retry settings were accepted")
+			}
+		})
+	}
+}
+
+func TestLoadCallAuditCanDisableDeadLetterRetry(t *testing.T) {
+	resetViperWithJWTSecret(t)
+	t.Setenv("CALL_AUDIT_ENABLED", "true")
+	t.Setenv("CALL_AUDIT_DEAD_LETTER_RETRY_ENABLED", "false")
+	t.Setenv("CALL_AUDIT_DEAD_LETTER_MAX_RETRIES", "0")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.CallAudit.Worker.DeadLetterRetry.Enabled {
+		t.Fatal("explicitly disabled dead-letter retry was enabled")
+	}
+}

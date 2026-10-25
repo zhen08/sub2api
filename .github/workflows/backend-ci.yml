@@ -45,6 +45,19 @@ jobs:
         working-directory: backend
         run: make test-integration
 
+  call-audit-monitoring:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-python@v6
+        with:
+          python-version: '3.12'
+      - name: Collector security and failure handling
+        run: make test-call-audit-monitoring
+      - name: Alert firing and recovery rules
+        run: make test-call-audit-alerts
+
   call-audit-integration:
     runs-on: ubuntu-latest
     timeout-minutes: 15

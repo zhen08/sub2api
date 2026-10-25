@@ -32,7 +32,7 @@ func TestDurableProcessorPostgreSQLMinIOIntegration(t *testing.T) {
 		t.Fatal("CALL_AUDIT_POSTGRES_URL and CALL_AUDIT_S3_* integration settings are required")
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 	spool, err := NewSpool(t.TempDir(), 1<<20)
 	if err != nil {
@@ -42,14 +42,14 @@ func TestDurableProcessorPostgreSQLMinIOIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer store.Close()
+	t.Cleanup(func() { _ = store.Close() })
 	migrationStore := store
 	if migrationPostgresURL != "" && migrationPostgresURL != postgresURL {
 		migrationStore, err = OpenPostgreSQLStore(migrationPostgresURL, 1, 1)
 		if err != nil {
 			t.Fatal(err)
 		}
-		defer migrationStore.Close()
+		t.Cleanup(func() { _ = migrationStore.Close() })
 	}
 	if err := migrationStore.EnsureSchema(ctx, time.Now()); err != nil {
 		t.Fatal(err)
@@ -133,7 +133,7 @@ func TestDurableProcessorPostgreSQLMinIOIntegration(t *testing.T) {
 	t.Cleanup(func() {
 		cleanupCtx, cleanupCancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cleanupCancel()
-		rows, _ := store.db.QueryContext(cleanupCtx, `SELECT bucket, object_key FROM audit_artifacts WHERE request_id=$1`, requestID)
+		rows, _ := store.db.QueryContext(cleanupCtx, `SELECT bucket, object_key FROM audit_artifacts WHERE request_id IN ($1, $2)`, requestID, s3FailureRequestID)
 		if rows != nil {
 			for rows.Next() {
 				var objectBucket, objectKey string
@@ -169,6 +169,17 @@ func TestDurableProcessorPostgreSQLMinIOIntegration(t *testing.T) {
 	}
 	if artifactCount != len(artifacts) || firstArtifactID != secondArtifactID {
 		t.Fatalf("artifact count/id after retry = %d/%d, want %d/%d", artifactCount, secondArtifactID, len(artifacts), firstArtifactID)
+	}
+	// A crash after StoreCompleted but before spool cleanup leaves an old claim.
+	// Its later failed-status reconciliation must never demote a stored call.
+	if err := store.UpsertCall(ctx, manifest, CaptureFailed, errors.New("stale claim after durable commit")); err != nil {
+		t.Fatal(err)
+	}
+	var committedStatus string
+	var committedError bool
+	if err := store.db.QueryRowContext(ctx, `SELECT capture_status, error IS NOT NULL FROM audit_calls WHERE request_id=$1`, requestID).
+		Scan(&committedStatus, &committedError); err != nil || committedStatus != string(CaptureStored) || committedError {
+		t.Fatalf("stale claim demoted stored call: status=%q error=%v err=%v", committedStatus, committedError, err)
 	}
 
 	// Later usage/dead-letter upserts must not replace identity values already
@@ -261,6 +272,78 @@ func TestDurableProcessorPostgreSQLMinIOIntegration(t *testing.T) {
 	var failureStatus string
 	if err := store.db.QueryRowContext(ctx, `SELECT capture_status FROM audit_calls WHERE request_id=$1`, s3FailureRequestID).Scan(&failureStatus); err != nil || failureStatus != string(CaptureRetrying) {
 		t.Fatalf("S3 failure status=%q err=%v", failureStatus, err)
+	}
+
+	// The durable queue must recover the same call after fast attempts exhaust,
+	// including a process restart during the slow retry delay. Real PostgreSQL
+	// and S3 writes prove recovery does not only clear the local health marker.
+	if _, err := spool.CommitManifest(failureManifest); err != nil {
+		t.Fatal(err)
+	}
+	recoveryNow := now
+	options := testWorkerOptions(&recoveryNow)
+	options.MaxAttempts = 1
+	options.DeadLetterRetry = DeadLetterRetryOptions{
+		Enabled: true, MaxRetries: 3, BatchSize: 1,
+		InitialDelay: 5 * time.Minute, MaxDelay: 20 * time.Minute,
+	}
+	options.SyncDeadLetter = func(syncCtx context.Context, m Manifest, cause error) error {
+		return store.UpsertCall(syncCtx, m, CaptureFailed, cause)
+	}
+	options.OnDeadLetter = func(m Manifest, cause error) {
+		if err := store.UpsertCall(ctx, m, CaptureFailed, cause); err != nil {
+			t.Fatalf("persist dead-letter status: %v", err)
+		}
+	}
+	storageUnavailable := true
+	processorCalls := 0
+	recoveringProcessor := ProcessorFunc(func(processCtx context.Context, m Manifest) error {
+		processorCalls++
+		if storageUnavailable {
+			return failureProcessor.Process(processCtx, m)
+		}
+		return processor.Process(processCtx, m)
+	})
+	worker, err := NewWorker(spool, recoveringProcessor, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if stats, err := worker.ProcessOnce(ctx); err != nil || stats.DeadLettered != 1 {
+		t.Fatalf("failed worker pass = %+v, %v", stats, err)
+	}
+	if err := store.db.QueryRowContext(ctx, `SELECT capture_status FROM audit_calls WHERE request_id=$1`, s3FailureRequestID).Scan(&failureStatus); err != nil || failureStatus != string(CaptureFailed) {
+		t.Fatalf("dead-letter status=%q err=%v", failureStatus, err)
+	}
+	storageUnavailable = false
+	worker, err = NewWorker(spool, recoveringProcessor, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := worker.ProcessOnce(ctx); err != nil || processorCalls != 1 {
+		t.Fatalf("restart ignored persisted slow retry deadline: calls=%d err=%v", processorCalls, err)
+	}
+	recoveryNow = recoveryNow.Add(5 * time.Minute)
+	if stats, err := worker.ProcessOnce(ctx); err != nil || stats.Succeeded != 1 || processorCalls != 2 {
+		t.Fatalf("automatic recovery = %+v, calls=%d, err=%v", stats, processorCalls, err)
+	}
+	if _, err := worker.ProcessOnce(ctx); err != nil {
+		t.Fatal(err)
+	}
+	var recoveredCost string
+	var recoveredTokens int64
+	var recoveredError bool
+	if err := store.db.QueryRowContext(ctx, `SELECT capture_status, cost::text, total_tokens, error IS NOT NULL FROM audit_calls WHERE request_id=$1`, s3FailureRequestID).
+		Scan(&failureStatus, &recoveredCost, &recoveredTokens, &recoveredError); err != nil || failureStatus != string(CaptureStored) || recoveredError {
+		t.Fatalf("recovered call status=%q error=%v err=%v", failureStatus, recoveredError, err)
+	}
+	if recoveredCost != failureManifest.Usage.Cost || recoveredTokens != failureManifest.Usage.TotalTokens {
+		t.Fatalf("historical usage changed: cost=%q tokens=%d", recoveredCost, recoveredTokens)
+	}
+	if err := store.db.QueryRowContext(ctx, `SELECT count(*) FROM audit_artifacts WHERE request_id=$1`, s3FailureRequestID).Scan(&artifactCount); err != nil || artifactCount != 1 {
+		t.Fatalf("recovered logical artifacts=%d err=%v", artifactCount, err)
+	}
+	if dead, err := spool.listManifestPaths(spoolDeadDir); err != nil || len(dead) != 0 {
+		t.Fatalf("dead letters remain after durable recovery: %v, %v", dead, err)
 	}
 
 	var objectKey, storedSHA string

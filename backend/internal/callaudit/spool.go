@@ -12,6 +12,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -30,6 +31,9 @@ var safeFilenamePart = regexp.MustCompile(`^[A-Za-z0-9._:-]+$`)
 type Spool struct {
 	root             string
 	maxArtifactBytes int64
+	// One process owns each spool. Serialize all workers sharing this instance,
+	// including explicit ProcessOnce calls, across claims and status writes.
+	workerMu sync.Mutex
 }
 
 func NewSpool(root string, maxArtifactBytes int64) (*Spool, error) {
@@ -113,8 +117,7 @@ func (s *Spool) WriteArtifact(createdAt time.Time, requestID string, kind Artifa
 	if int64(len(raw)) > s.maxArtifactBytes {
 		return ArtifactRef{}, fmt.Errorf("artifact exceeds %d byte limit", s.maxArtifactBytes)
 	}
-	filename := fmt.Sprintf("%s-%s-%d.json", spoolRequestFilePart(requestID), kind, sequence)
-	relative := filepath.Join(spoolArtifactsDir, createdAt.UTC().Format(time.DateOnly), filename)
+	relative := filepath.FromSlash(canonicalArtifactSpoolPath(createdAt, requestID, kind, sequence))
 	absolute, err := s.safePath(relative)
 	if err != nil {
 		return ArtifactRef{}, err
@@ -144,8 +147,7 @@ func (s *Spool) WriteArtifactStream(createdAt time.Time, requestID string, kind 
 	if createdAt.IsZero() {
 		createdAt = time.Now()
 	}
-	filename := fmt.Sprintf("%s-%s-%d.json", spoolRequestFilePart(requestID), kind, sequence)
-	relative := filepath.Join(spoolArtifactsDir, createdAt.UTC().Format(time.DateOnly), filename)
+	relative := filepath.FromSlash(canonicalArtifactSpoolPath(createdAt, requestID, kind, sequence))
 	absolute, err := s.safePath(relative)
 	if err != nil {
 		return ArtifactRef{}, err
@@ -374,18 +376,33 @@ func (s *Spool) safePath(relativeOrAbsolute string) (string, error) {
 }
 
 func (s *Spool) removeBundle(manifest Manifest) error {
+	if err := validateBundleArtifactOwnership(s, manifest); err != nil {
+		return err
+	}
+	// Finish every ownership/path check before deleting the first file. Do not
+	// require all artifacts to exist: successful partial cleanup is idempotent.
+	for _, artifact := range manifest.Artifacts {
+		if err := validateCleanupArtifactPath(s, artifact); err != nil {
+			return err
+		}
+	}
+	root, err := os.OpenRoot(s.root)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
 	var joined error
 	for _, artifact := range manifest.Artifacts {
-		absolute, err := s.safePath(artifact.SpoolPath)
-		if err != nil {
-			joined = errors.Join(joined, err)
-			continue
-		}
-		if err := os.Remove(absolute); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := root.Remove(filepath.FromSlash(artifact.SpoolPath)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			joined = errors.Join(joined, err)
 		}
 	}
 	return joined
+}
+
+func canonicalArtifactSpoolPath(createdAt time.Time, requestID string, kind ArtifactKind, sequence int) string {
+	filename := fmt.Sprintf("%s-%s-%d.json", spoolRequestFilePart(requestID), kind, sequence)
+	return filepath.ToSlash(filepath.Join(spoolArtifactsDir, createdAt.UTC().Format(time.DateOnly), filename))
 }
 
 func spoolRequestFilePart(requestID string) string {

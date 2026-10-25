@@ -1,0 +1,30 @@
+[Unit]
+Description=Collect local Sub2API Call Audit health for Prometheus
+After=docker.service network-online.target
+Wants=network-online.target
+ConditionPathIsDirectory=/var/lib/node_exporter/textfile_collector
+
+[Service]
+Type=oneshot
+User=root
+Group=root
+ExecStart=/usr/bin/python3 -B /usr/local/libexec/sub2api-call-audit-collector.py
+TimeoutStartSec=20s
+UMask=0022
+NoNewPrivileges=true
+PrivateTmp=true
+PrivateDevices=true
+ProtectSystem=strict
+ProtectHome=true
+ProtectKernelTunables=true
+ProtectKernelModules=true
+ProtectControlGroups=true
+LockPersonality=true
+RestrictSUIDSGID=true
+RestrictAddressFamilies=AF_UNIX AF_INET
+ReadWritePaths=/var/lib/node_exporter/textfile_collector
+CapabilityBoundingSet=
+AmbientCapabilities=
+LimitCORE=0
+MemoryMax=128M
+TasksMax=64

@@ -180,6 +180,11 @@ type Manifest struct {
 	LastAttemptAt    *time.Time     `json:"lastAttemptAt,omitempty"`
 	FailedAt         *time.Time     `json:"failedAt,omitempty"`
 	LastErrorCode    string         `json:"lastErrorCode,omitempty"`
+	// These fields survive every queue transition and process restart. Slow
+	// dead-letter retries are a separate, bounded budget from initial retries.
+	DeadLetterRetries    int        `json:"deadLetterRetries,omitempty"`
+	FirstFailedAt        *time.Time `json:"firstFailedAt,omitempty"`
+	LastFailureRetryable *bool      `json:"lastFailureRetryable,omitempty"`
 }
 
 type Outcome struct {

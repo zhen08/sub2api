@@ -1840,13 +1840,24 @@ type CallAuditConfig struct {
 }
 
 type CallAuditWorkerConfig struct {
+	Enabled             bool                           `mapstructure:"enabled"`
+	MaxAttempts         int                            `mapstructure:"max_attempts"`
+	BatchSize           int                            `mapstructure:"batch_size"`
+	PollIntervalMS      int                            `mapstructure:"poll_interval_ms"`
+	RetryInitialDelayMS int                            `mapstructure:"retry_initial_delay_ms"`
+	RetryMaxDelayMS     int                            `mapstructure:"retry_max_delay_ms"`
+	ClaimTimeoutSeconds int                            `mapstructure:"claim_timeout_seconds"`
+	DeadLetterRetry     CallAuditDeadLetterRetryConfig `mapstructure:"dead_letter_retry"`
+}
+
+// CallAuditDeadLetterRetryConfig bounds the slower recovery attempts after the
+// normal worker retry budget is exhausted. Retry progress is stored per bundle.
+type CallAuditDeadLetterRetryConfig struct {
 	Enabled             bool `mapstructure:"enabled"`
-	MaxAttempts         int  `mapstructure:"max_attempts"`
+	MaxRetries          int  `mapstructure:"max_retries"`
 	BatchSize           int  `mapstructure:"batch_size"`
-	PollIntervalMS      int  `mapstructure:"poll_interval_ms"`
-	RetryInitialDelayMS int  `mapstructure:"retry_initial_delay_ms"`
-	RetryMaxDelayMS     int  `mapstructure:"retry_max_delay_ms"`
-	ClaimTimeoutSeconds int  `mapstructure:"claim_timeout_seconds"`
+	InitialDelaySeconds int  `mapstructure:"initial_delay_seconds"`
+	MaxDelaySeconds     int  `mapstructure:"max_delay_seconds"`
 }
 
 type CallAuditS3Config struct {
@@ -1896,30 +1907,35 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 		return nil, fmt.Errorf("bind ENABLE_SERVER_TIMING: %w", err)
 	}
 	callAuditEnvAliases := map[string][]string{
-		"call_audit.enabled":                       {"CALL_AUDIT_ENABLED", "AUDIT_CAPTURE_ENABLED"},
-		"call_audit.retention_days":                {"CALL_AUDIT_RETENTION_DAYS", "AUDIT_RETENTION_DAYS"},
-		"call_audit.failure_policy":                {"CALL_AUDIT_FAILURE_POLICY", "AUDIT_FAILURE_POLICY"},
-		"call_audit.postgres_url":                  {"CALL_AUDIT_POSTGRES_URL", "AUDIT_POSTGRES_URL"},
-		"call_audit.spool_dir":                     {"CALL_AUDIT_SPOOL_DIR", "AUDIT_SPOOL_DIR"},
-		"call_audit.object_key_prefix":             {"CALL_AUDIT_OBJECT_KEY_PREFIX", "AUDIT_OBJECT_KEY_PREFIX"},
-		"call_audit.max_artifact_bytes":            {"CALL_AUDIT_MAX_ARTIFACT_BYTES"},
-		"call_audit.disk_high_watermark_percent":   {"CALL_AUDIT_DISK_HIGH_WATERMARK_PERCENT"},
-		"call_audit.disk_min_free_bytes":           {"CALL_AUDIT_DISK_MIN_FREE_BYTES"},
-		"call_audit.usage_wait_timeout_ms":         {"CALL_AUDIT_USAGE_WAIT_TIMEOUT_MS"},
-		"call_audit.retention_cleanup_enabled":     {"CALL_AUDIT_RETENTION_CLEANUP_ENABLED"},
-		"call_audit.worker.enabled":                {"CALL_AUDIT_WORKER_ENABLED", "AUDIT_WORKER_ENABLED"},
-		"call_audit.worker.max_attempts":           {"CALL_AUDIT_WORKER_MAX_ATTEMPTS", "AUDIT_MAX_ATTEMPTS"},
-		"call_audit.worker.batch_size":             {"CALL_AUDIT_WORKER_BATCH_SIZE"},
-		"call_audit.worker.poll_interval_ms":       {"CALL_AUDIT_WORKER_POLL_INTERVAL_MS"},
-		"call_audit.worker.retry_initial_delay_ms": {"CALL_AUDIT_WORKER_RETRY_INITIAL_DELAY_MS"},
-		"call_audit.worker.retry_max_delay_ms":     {"CALL_AUDIT_WORKER_RETRY_MAX_DELAY_MS"},
-		"call_audit.worker.claim_timeout_seconds":  {"CALL_AUDIT_WORKER_CLAIM_TIMEOUT_SECONDS"},
-		"call_audit.s3.endpoint":                   {"CALL_AUDIT_S3_ENDPOINT", "AUDIT_MINIO_ENDPOINT"},
-		"call_audit.s3.bucket":                     {"CALL_AUDIT_S3_BUCKET", "AUDIT_MINIO_BUCKET"},
-		"call_audit.s3.access_key":                 {"CALL_AUDIT_S3_ACCESS_KEY", "AUDIT_MINIO_ACCESS_KEY"},
-		"call_audit.s3.secret_key":                 {"CALL_AUDIT_S3_SECRET_KEY", "AUDIT_MINIO_SECRET_KEY"},
-		"call_audit.s3.region":                     {"CALL_AUDIT_S3_REGION", "AUDIT_MINIO_REGION"},
-		"call_audit.s3.force_path_style":           {"CALL_AUDIT_S3_FORCE_PATH_STYLE"},
+		"call_audit.enabled":                                        {"CALL_AUDIT_ENABLED", "AUDIT_CAPTURE_ENABLED"},
+		"call_audit.retention_days":                                 {"CALL_AUDIT_RETENTION_DAYS", "AUDIT_RETENTION_DAYS"},
+		"call_audit.failure_policy":                                 {"CALL_AUDIT_FAILURE_POLICY", "AUDIT_FAILURE_POLICY"},
+		"call_audit.postgres_url":                                   {"CALL_AUDIT_POSTGRES_URL", "AUDIT_POSTGRES_URL"},
+		"call_audit.spool_dir":                                      {"CALL_AUDIT_SPOOL_DIR", "AUDIT_SPOOL_DIR"},
+		"call_audit.object_key_prefix":                              {"CALL_AUDIT_OBJECT_KEY_PREFIX", "AUDIT_OBJECT_KEY_PREFIX"},
+		"call_audit.max_artifact_bytes":                             {"CALL_AUDIT_MAX_ARTIFACT_BYTES"},
+		"call_audit.disk_high_watermark_percent":                    {"CALL_AUDIT_DISK_HIGH_WATERMARK_PERCENT"},
+		"call_audit.disk_min_free_bytes":                            {"CALL_AUDIT_DISK_MIN_FREE_BYTES"},
+		"call_audit.usage_wait_timeout_ms":                          {"CALL_AUDIT_USAGE_WAIT_TIMEOUT_MS"},
+		"call_audit.retention_cleanup_enabled":                      {"CALL_AUDIT_RETENTION_CLEANUP_ENABLED"},
+		"call_audit.worker.enabled":                                 {"CALL_AUDIT_WORKER_ENABLED", "AUDIT_WORKER_ENABLED"},
+		"call_audit.worker.max_attempts":                            {"CALL_AUDIT_WORKER_MAX_ATTEMPTS", "AUDIT_MAX_ATTEMPTS"},
+		"call_audit.worker.batch_size":                              {"CALL_AUDIT_WORKER_BATCH_SIZE"},
+		"call_audit.worker.poll_interval_ms":                        {"CALL_AUDIT_WORKER_POLL_INTERVAL_MS"},
+		"call_audit.worker.retry_initial_delay_ms":                  {"CALL_AUDIT_WORKER_RETRY_INITIAL_DELAY_MS"},
+		"call_audit.worker.retry_max_delay_ms":                      {"CALL_AUDIT_WORKER_RETRY_MAX_DELAY_MS"},
+		"call_audit.worker.claim_timeout_seconds":                   {"CALL_AUDIT_WORKER_CLAIM_TIMEOUT_SECONDS"},
+		"call_audit.worker.dead_letter_retry.enabled":               {"CALL_AUDIT_DEAD_LETTER_RETRY_ENABLED"},
+		"call_audit.worker.dead_letter_retry.max_retries":           {"CALL_AUDIT_DEAD_LETTER_MAX_RETRIES"},
+		"call_audit.worker.dead_letter_retry.batch_size":            {"CALL_AUDIT_DEAD_LETTER_BATCH_SIZE"},
+		"call_audit.worker.dead_letter_retry.initial_delay_seconds": {"CALL_AUDIT_DEAD_LETTER_INITIAL_DELAY_SECONDS"},
+		"call_audit.worker.dead_letter_retry.max_delay_seconds":     {"CALL_AUDIT_DEAD_LETTER_MAX_DELAY_SECONDS"},
+		"call_audit.s3.endpoint":                                    {"CALL_AUDIT_S3_ENDPOINT", "AUDIT_MINIO_ENDPOINT"},
+		"call_audit.s3.bucket":                                      {"CALL_AUDIT_S3_BUCKET", "AUDIT_MINIO_BUCKET"},
+		"call_audit.s3.access_key":                                  {"CALL_AUDIT_S3_ACCESS_KEY", "AUDIT_MINIO_ACCESS_KEY"},
+		"call_audit.s3.secret_key":                                  {"CALL_AUDIT_S3_SECRET_KEY", "AUDIT_MINIO_SECRET_KEY"},
+		"call_audit.s3.region":                                      {"CALL_AUDIT_S3_REGION", "AUDIT_MINIO_REGION"},
+		"call_audit.s3.force_path_style":                            {"CALL_AUDIT_S3_FORCE_PATH_STYLE"},
 	}
 	for key, aliases := range callAuditEnvAliases {
 		bindings := append([]string{key}, aliases...)
@@ -2527,6 +2543,11 @@ func setDefaults() {
 	viper.SetDefault("call_audit.worker.retry_initial_delay_ms", 1000)
 	viper.SetDefault("call_audit.worker.retry_max_delay_ms", 300000)
 	viper.SetDefault("call_audit.worker.claim_timeout_seconds", 300)
+	viper.SetDefault("call_audit.worker.dead_letter_retry.enabled", true)
+	viper.SetDefault("call_audit.worker.dead_letter_retry.max_retries", 12)
+	viper.SetDefault("call_audit.worker.dead_letter_retry.batch_size", 2)
+	viper.SetDefault("call_audit.worker.dead_letter_retry.initial_delay_seconds", 900)
+	viper.SetDefault("call_audit.worker.dead_letter_retry.max_delay_seconds", 21600)
 	viper.SetDefault("call_audit.s3.endpoint", "")
 	viper.SetDefault("call_audit.s3.bucket", "ai-call-audit")
 	viper.SetDefault("call_audit.s3.access_key", "")
@@ -3002,6 +3023,13 @@ func (c *Config) Validate() error {
 			c.CallAudit.Worker.RetryMaxDelayMS < c.CallAudit.Worker.RetryInitialDelayMS ||
 			c.CallAudit.Worker.ClaimTimeoutSeconds <= 0 {
 			return fmt.Errorf("call_audit.worker settings are invalid")
+		}
+		deadLetter := c.CallAudit.Worker.DeadLetterRetry
+		if deadLetter.Enabled && (deadLetter.MaxRetries <= 0 || deadLetter.MaxRetries > 100 ||
+			deadLetter.BatchSize <= 0 || deadLetter.BatchSize > 100 ||
+			deadLetter.InitialDelaySeconds <= 0 || deadLetter.MaxDelaySeconds < deadLetter.InitialDelaySeconds ||
+			deadLetter.MaxDelaySeconds > 7*24*60*60) {
+			return fmt.Errorf("call_audit.worker.dead_letter_retry requires 1-100 retries, batch size 1-100, and positive delays capped at 7 days")
 		}
 	}
 

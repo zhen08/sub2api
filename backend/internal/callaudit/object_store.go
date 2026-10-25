@@ -75,15 +75,15 @@ func (s *ObjectStore) Upload(ctx context.Context, manifest Manifest, artifact Ar
 	if s == nil || s.client == nil || s.spool == nil {
 		return StoredArtifact{}, fmt.Errorf("audit object storage is not configured")
 	}
-	sourcePath, err := s.spool.safePath(artifact.SpoolPath)
+	if err := validateArtifactOwnership(manifest, artifact); err != nil {
+		return StoredArtifact{}, err
+	}
+	source, err := openReplayArtifact(s.spool, artifact)
 	if err != nil {
 		return StoredArtifact{}, err
 	}
-	source, err := os.Open(sourcePath)
-	if err != nil {
-		return StoredArtifact{}, fmt.Errorf("open audit artifact: %w", err)
-	}
 	defer source.Close()
+	sourcePath := source.Name()
 
 	temp, err := os.CreateTemp(filepath.Dir(sourcePath), ".audit-upload-*.json.gz")
 	if err != nil {
@@ -118,7 +118,7 @@ func (s *ObjectStore) Upload(ctx context.Context, manifest Manifest, artifact Ar
 	}
 	objectKey, err := BuildLegacyObjectKey(s.cfg.Prefix, manifest.CreatedAt, manifest.APIKeyID, manifest.RequestID, artifact.Kind, artifact.Sequence)
 	if err != nil {
-		return StoredArtifact{}, err
+		return StoredArtifact{}, replayValidationError("artifact_invalid_reference", false, err)
 	}
 	digest := hash.Sum(nil)
 	_, err = s.client.PutObject(ctx, &s3.PutObjectInput{

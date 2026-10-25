@@ -2,6 +2,7 @@ package callaudit
 
 import (
 	"context"
+	"errors"
 	"fmt"
 )
 
@@ -21,6 +22,9 @@ func NewDurableProcessor(store *PostgreSQLStore, objects *ObjectStore) (*Durable
 }
 
 func (p *DurableProcessor) Process(ctx context.Context, manifest Manifest) error {
+	if err := validateAuditBundle(p.objects.spool, manifest); err != nil {
+		return err
+	}
 	status := manifest.CaptureStatus
 	if status == "" {
 		status = CapturePending
@@ -33,7 +37,16 @@ func (p *DurableProcessor) Process(ctx context.Context, manifest Manifest) error
 	for _, artifact := range manifest.Artifacts {
 		stored, err := p.objects.Upload(ctx, manifest, artifact)
 		if err != nil {
-			_ = p.store.UpsertCall(ctx, manifest, CaptureRetrying, err)
+			captureStatus := CaptureRetrying
+			var classified *ProcessError
+			if errors.As(err, &classified) {
+				if !classified.Retryable {
+					captureStatus = CaptureFailed
+				}
+				_ = p.store.UpsertCall(ctx, manifest, captureStatus, err)
+				return err
+			}
+			_ = p.store.UpsertCall(ctx, manifest, captureStatus, err)
 			return Retryable("s3_upload_failed", err)
 		}
 		uploaded = append(uploaded, stored)

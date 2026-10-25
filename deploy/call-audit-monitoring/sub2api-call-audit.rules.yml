@@ -1,0 +1,91 @@
+groups:
+  - name: sub2api-call-audit
+    rules:
+      - alert: Sub2APICallAuditDeadLetters
+        expr: >-
+          (sub2api_call_audit_dead_letter_files{job="node",instance="basic-services"} > 0)
+          unless (
+            (sub2api_call_audit_dead_letter_exhausted{job="node",instance="basic-services"} > 0)
+            or (sub2api_call_audit_dead_letter_permanent{job="node",instance="basic-services"} > 0)
+            or (sub2api_call_audit_oldest_dead_letter_seconds{job="node",instance="basic-services"} >= 3600)
+          )
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Sub2API audit has unresolved dead letters"
+          description: "Dead letters have remained for 5 minutes. Inspect automatic retry state; keep original manifests and artifacts."
+      - alert: Sub2APICallAuditRetryExhausted
+        expr: >-
+          (sub2api_call_audit_dead_letter_exhausted{job="node",instance="basic-services"} > 0)
+          or (sub2api_call_audit_dead_letter_permanent{job="node",instance="basic-services"} > 0)
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "Sub2API audit recovery needs intervention"
+          description: "At least one dead letter is permanently invalid or has exhausted automatic recovery. Do not delete its source artifacts."
+      - alert: Sub2APICallAuditDeadLetterTooOld
+        expr: sub2api_call_audit_oldest_dead_letter_seconds{job="node",instance="basic-services"} >= 3600
+        for: 1m
+        labels: { severity: critical }
+        annotations:
+          summary: "Sub2API audit dead letter is at least one hour old"
+          description: "Automatic recovery has not resolved an audit failure within one hour. Check storage, retries and retained source files."
+      - alert: Sub2APICallAuditCaptureFailures
+        expr: increase(sub2api_call_audit_capture_failures_total{job="node",instance="basic-services"}[10m]) > 0
+        for: 0m
+        labels: { severity: critical }
+        annotations:
+          summary: "Sub2API audit capture failures increased"
+          description: "New capture failures occurred in the last 10 minutes; affected requests may lack complete audit artifacts."
+      - alert: Sub2APICallAuditBacklogTooOld
+        expr: >-
+          (sub2api_call_audit_backlog{job="node",instance="basic-services"} > 0)
+          and (sub2api_call_audit_oldest_pending_seconds{job="node",instance="basic-services"} >= 300)
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Sub2API audit processing backlog is stalled"
+          description: "Pending audit work has been at least 5 minutes old for 5 minutes. Check worker progress and storage availability."
+      - alert: Sub2APICallAuditCollectorUnavailable
+        expr: >-
+          absent(sub2api_call_audit_collector_success{job="node",instance="basic-services"})
+          or (sub2api_call_audit_collector_success{job="node",instance="basic-services"} == 0)
+          or absent(sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"})
+          or (time() - sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"} > 180)
+        for: 2m
+        labels: { severity: critical }
+        annotations:
+          summary: "Sub2API audit monitoring is unavailable"
+          description: "The local health collector failed, disappeared or has no successful sample within 3 minutes. Audit health is unknown."
+      - alert: Sub2APICallAuditRecoveryMetricsMissing
+        expr: >-
+          (sub2api_call_audit_enabled{job="node",instance="basic-services"} == 1)
+          and (sub2api_call_audit_recovery_metrics_available{job="node",instance="basic-services"} == 0)
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Sub2API audit recovery telemetry is unavailable"
+          description: "The application exposes the legacy health schema. Retry classification and dead-letter age are unknown, not zero. Deploy the compatible audit runtime."
+      - alert: Sub2APICallAuditNotReady
+        expr: >-
+          (
+            (sub2api_call_audit_enabled{job="node",instance="basic-services"} == 0)
+            or (sub2api_call_audit_ready{job="node",instance="basic-services"} == 0)
+          ) unless (
+            (sub2api_call_audit_dead_letter_files{job="node",instance="basic-services"} > 0)
+            or (sub2api_call_audit_dead_letter_recovering{job="node",instance="basic-services"} > 0)
+          )
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Sub2API full call audit is disabled or degraded"
+          description: "The application has reported disabled or degraded audit readiness for 5 minutes. Inference health alone does not prove audit health."
+      - alert: Sub2APICallAuditAutoRetryDisabled
+        expr: >-
+          (sub2api_call_audit_enabled{job="node",instance="basic-services"} == 1)
+          and (sub2api_call_audit_dead_letter_auto_retry_enabled{job="node",instance="basic-services"} == 0)
+        for: 5m
+        labels: { severity: warning }
+        annotations:
+          summary: "Sub2API audit automatic recovery is disabled"
+          description: "Full call audit is enabled but dead-letter automatic retry has been disabled for 5 minutes. Check the intended recovery policy."

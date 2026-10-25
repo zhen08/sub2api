@@ -1347,6 +1347,13 @@ call_audit:
     retry_initial_delay_ms: 1000
     retry_max_delay_ms: 300000
     claim_timeout_seconds: 300
+    # 快速重试耗尽后，持久化慢速重试进度；永久错误保留并告警。
+    dead_letter_retry:
+      enabled: true
+      max_retries: 12
+      batch_size: 2
+      initial_delay_seconds: 900
+      max_delay_seconds: 21600
   s3:
     endpoint: ""
     bucket: "ai-call-audit"
