@@ -55,8 +55,30 @@ if printf '%s\n' "$normalized_config" | grep -Eq '^import([[:space:]]|$)'; then
 	exit 1
 fi
 
-if printf '%s\n' "$normalized_config" | grep -Eiq '^flush_interval([[:space:]]|$)'; then
-	echo "Caddyfile must leave flush_interval unset so SSE auto-flushing and client cancellation remain intact" >&2
+# Audit-query gzip NDJSON exports intentionally use immediate flushing. Keep
+# that exception confined to its dedicated loopback proxy; inference routes
+# must retain Caddy SSE auto-flushing and upstream cancellation behavior.
+if ! printf '%s\n' "$normalized_config" | awk '
+	{
+		for (field = 1; field <= NF; field++) {
+			if (tolower($field) == "flush_interval" &&
+				($0 != "flush_interval -1" ||
+				 blocks[depth] != "reverse_proxy 127.0.0.1:3100 {" ||
+				 blocks[depth - 1] != "handle_path /audit-query/* {")) {
+				invalid = 1
+			}
+		}
+		for (field = 1; field <= NF; field++) {
+			if ($field == "{") blocks[++depth] = $0
+			if ($field == "}") {
+				delete blocks[depth]
+				depth--
+			}
+		}
+	}
+	END { exit invalid ? 1 : 0 }
+'; then
+	echo "Caddyfile must leave flush_interval unset outside the dedicated /audit-query/* loopback proxy, where only -1 is allowed" >&2
 	exit 1
 fi
 

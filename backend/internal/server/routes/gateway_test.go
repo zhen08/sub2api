@@ -167,9 +167,6 @@ func TestEveryGatewayPOSTHasExplicitCallAuditPolicy(t *testing.T) {
 		intentionallyExcluded := strings.Contains(path, "/count_tokens") ||
 			strings.Contains(path, "/images/") || strings.Contains(path, "/videos/") ||
 			strings.HasSuffix(path, "/videos") ||
-			// Native System One has its own security-audit path and is not yet
-			// represented by the Call Audit protocol classifier.
-			strings.HasSuffix(path, "/systemone") ||
 			// Gemini cached-content lifecycle calls manage server-side context and
 			// do not represent a model invocation for Call Audit.
 			strings.HasSuffix(path, "/cachedcontents") ||
@@ -184,6 +181,7 @@ func TestEveryGatewayPOSTHasExplicitCallAuditPolicy(t *testing.T) {
 			"POST %s must be explicitly audited or intentionally excluded", route.Path)
 	}
 	for _, path := range []string{
+		"/v1/systemone",
 		"/v1beta/models/gemini-2.5-pro:generateContent",
 		"/v1beta/models/gemini-2.5-pro:streamGenerateContent?alt=sse",
 		"/antigravity/v1beta/models/gemini-2.5-pro:streamGenerateContent?alt=sse",
