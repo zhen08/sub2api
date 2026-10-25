@@ -115,7 +115,7 @@ func newChannelMonitorRunner(svc monitorRunnerSvc, settingService *SettingServic
 // Start 加载所有 enabled monitor 并为每个建立独立定时任务。
 // 调用方需保证只调一次（wire ProvideChannelMonitorRunner 内只调一次）。
 func (r *ChannelMonitorRunner) Start() {
-	if r == nil || r.svc == nil {
+	if r == nil || r.svc == nil || !deploymentBackgroundJobsEnabled() {
 		return
 	}
 	r.mu.Lock()
@@ -144,7 +144,7 @@ func (r *ChannelMonitorRunner) Start() {
 //   - 已存在的任务会先被取消再重建（适用于 IntervalSeconds 变更场景）
 //   - 新任务立即触发首次检测，之后按 IntervalSeconds 周期触发
 func (r *ChannelMonitorRunner) Schedule(m *ChannelMonitor) {
-	if r == nil || m == nil {
+	if r == nil || m == nil || !deploymentBackgroundJobsEnabled() {
 		return
 	}
 	if !m.Enabled || m.APIKeyDecryptFailed {

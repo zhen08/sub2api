@@ -23,11 +23,12 @@ class SSHResult(subprocess.CompletedProcess):
 
 STDERR_CLASSIFICATION_LIMIT = 4096
 SSH_ERROR_PATTERNS = {
+    # Permanent security failures take precedence over transient wording.
+    'auth_failed': (b'permission denied', b'authentication failed'),
+    'host_key': (b'host key verification failed', b'remote host identification has changed'),
     'timeout': (b'timed out', b'timeout'),
     'refused': (b'connection refused',),
     'network_unreachable': (b'network is unreachable', b'no route to host'),
-    'auth_failed': (b'permission denied', b'authentication failed'),
-    'host_key': (b'host key verification failed', b'remote host identification has changed'),
     'connection_closed': (b'connection closed', b'connection reset', b'broken pipe'),
 }
 
@@ -182,7 +183,8 @@ def main():
         print(json.dumps({'status':'error','error':'source_read_failed'}))
         return 1
     hour = int(time.time() // 3600) - 1
-    deadline = time.monotonic() + 900
+    started = time.monotonic()
+    deadline = started + 900
     failures = []
 
     def fail(terminal):
@@ -193,7 +195,10 @@ def main():
         print(json.dumps(terminal))
         return 1
 
-    for attempt, delay in enumerate((0, 5, 15), 1):
+    # Absolute offsets disperse even fast connection failures; slow attempts do
+    # not accumulate backoff. Last slot retains a full 269s + cleanup budget.
+    for attempt, offset in enumerate((0, 300, 630), 1):
+        delay = max(0, started + offset - time.monotonic())
         if int(time.time() // 3600) - 1 != hour:
             return fail({'status':'error','error':'hour_rollover','hour':hour})
         remaining = min(deadline - time.monotonic(), (hour + 2)*3600 - time.time())
@@ -228,6 +233,9 @@ def main():
                         and remote.get('error') == 'source channel configuration drift'):
                     failure['remote_error'] = 'source channel configuration drift'
             failures.append(failure)
+            if result.returncode != 255 or failure['ssh_error'] not in (
+                    'timeout', 'refused', 'network_unreachable', 'connection_closed'):
+                return fail({'status':'error','error':'non_retryable_failure','hour':hour})
         except ValueError:
             return fail({'status':'error','error':'invalid_ssh_configuration'})
         except (WrapperError, subprocess.TimeoutExpired, OSError) as error:
@@ -236,6 +244,9 @@ def main():
             failures.append({'status':'error','error':'SSH wrapper timeout or execution failure',
                              'attempt':attempt,'hour':hour,
                              'ssh_error':'timeout' if timed_out else 'unknown'})
+            # A local watchdog/IO/output-limit failure is not proof of a
+            # transient SSH transport fault. Preserve pending state for review.
+            return fail({'status':'error','error':'non_retryable_failure','hour':hour})
     return fail({'status':'error','error':'retries_exhausted','attempts':3,'hour':hour})
 
 

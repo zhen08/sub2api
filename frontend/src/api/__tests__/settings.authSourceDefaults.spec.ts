@@ -249,6 +249,7 @@ describe("normalizePlatformQuotasMap", () => {
     const result = normalizePlatformQuotasMap();
     expect(listPlatformIds()).toEqual(quotaPlatforms);
     expect(Object.keys(result)).toEqual(quotaPlatforms);
+    expect(result).toEqual(allNullQuotas);
     for (const v of Object.values(result)) {
       expect(v).toEqual({ daily: null, weekly: null, monthly: null });
     }
@@ -297,6 +298,7 @@ describe("sanitizePlatformQuotasMap", () => {
   it("缺失平台填充为全 null", () => {
     const result = sanitizePlatformQuotasMap({});
     expect(Object.keys(result)).toEqual(quotaPlatforms);
+    expect(result).toEqual(allNullQuotas);
     for (const v of Object.values(result)) {
       expect(v).toEqual({ daily: null, weekly: null, monthly: null });
     }

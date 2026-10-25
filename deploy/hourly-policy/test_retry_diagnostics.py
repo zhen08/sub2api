@@ -12,6 +12,7 @@ import unittest
 from unittest.mock import patch
 
 import run_remote as r
+from test_retry_schedule import transport
 
 
 class RetryDiagnosticsTests(unittest.TestCase):
@@ -40,13 +41,14 @@ class RetryDiagnosticsTests(unittest.TestCase):
                 self.assertEqual(result.stderr, b'present')
                 self.assertNotIn('DUMMY-SECRET', repr((result.stdout, result.stderr, result.ssh_error)))
                 code, output, calls = self.invoke([result] * 3)
-                self.assertEqual((code, calls), (1, 3))
+                count = 1 if expected in ('unknown', 'auth_failed', 'host_key') else 3
+                self.assertEqual((code, calls), (1, count))
                 records = [json.loads(line) for line in output.splitlines()]
-                self.assertEqual([row.get('ssh_error') for row in records[:-1]], [expected] * 3)
+                self.assertEqual([row.get('ssh_error') for row in records[:-1]], [expected] * count)
                 self.assertNotIn('DUMMY-SECRET', output)
 
     def test_local_record_is_private_bounded_and_retained_across_clean_success(self):
-        failure = subprocess.CompletedProcess([], 255, b'DUMMY-SECRET', b'DUMMY-SECRET')
+        failure = transport('connection_closed')
         success = subprocess.CompletedProcess([], 0, b'', b'')
         with tempfile.TemporaryDirectory() as directory:
             record = Path(directory) / 'last-retry-failure.json'
@@ -79,7 +81,7 @@ class RetryDiagnosticsTests(unittest.TestCase):
             self.assertEqual(data['failures'][0], json.loads(output.splitlines()[0]))
             self.assertEqual([item.name for item in Path(directory).iterdir()], [record.name])
 
-    def test_wrapper_exception_codes_are_static_and_silent_on_recovery(self):
+    def test_wrapper_exception_codes_are_static_and_fail_without_retry(self):
         success = subprocess.CompletedProcess([], 0, b'', b'')
         for error, expected in ((r.WrapperError('timeout'), 'timeout'),
                 (subprocess.TimeoutExpired('DUMMY-SECRET', 1, stderr=b'DUMMY-SECRET'), 'timeout'),
@@ -87,13 +89,13 @@ class RetryDiagnosticsTests(unittest.TestCase):
                 (r.WrapperError('output_limit'), 'unknown')):
             with self.subTest(expected=expected):
                 code, output, calls = self.invoke([error] * 3)
-                self.assertEqual((code, calls), (1, 3))
-                self.assertEqual([json.loads(line).get('ssh_error') for line in output.splitlines()[:-1]], [expected] * 3)
+                self.assertEqual((code, calls), (1, 1))
+                self.assertEqual([json.loads(line).get('ssh_error') for line in output.splitlines()[:-1]], [expected])
                 self.assertNotIn('DUMMY-SECRET', output)
-                self.assertEqual(self.invoke([error, success])[:2], (0, ''))
+                self.assertEqual(self.invoke([error, success])[2], 1)
 
     def test_local_record_failures_never_change_notification_or_follow_target_symlink(self):
-        failure = subprocess.CompletedProcess([], 255, b'DUMMY-SECRET', b'DUMMY-SECRET')
+        failure = transport('connection_closed')
         success = subprocess.CompletedProcess([], 0, b'', b'')
         with tempfile.TemporaryDirectory() as directory:
             root = Path(directory)
@@ -121,7 +123,7 @@ class RetryDiagnosticsTests(unittest.TestCase):
             self.assertEqual(record.read_bytes(), saved)
 
     def test_local_record_stale_temp_is_not_overwritten_or_accumulated(self):
-        failure = subprocess.CompletedProcess([], 255, b'', b'')
+        failure = transport('connection_closed')
         success = subprocess.CompletedProcess([], 0, b'', b'')
         with tempfile.TemporaryDirectory() as directory:
             temporary = Path(directory) / '.last-retry-failure.tmp'
@@ -133,7 +135,7 @@ class RetryDiagnosticsTests(unittest.TestCase):
             self.assertEqual(temporary.read_text(), 'previous interrupted or concurrent writer')
 
     def test_local_record_cleanup_never_unlinks_next_writers_slot(self):
-        failure = subprocess.CompletedProcess([], 255, b'', b'')
+        failure = transport('connection_closed')
         success = subprocess.CompletedProcess([], 0, b'', b'')
         replace = os.replace
         with tempfile.TemporaryDirectory() as directory:
@@ -172,7 +174,7 @@ class RetryDiagnosticsTests(unittest.TestCase):
         for cron in (False, True):
             for final in ('', transition):
                 with self.subTest(cron=cron, final=final):
-                    failures = [subprocess.CompletedProcess([], 255, b'DUMMY-SECRET', b'DUMMY-SECRET')] * 2
+                    failures = [transport('connection_closed')] * 2
                     code, output, calls = self.invoke(failures + [subprocess.CompletedProcess([], 0, final.encode(), b'')], cron)
                     expected = (json.dumps({'email': 'fixture@example.test', 'from': 'original', 'to': 'terra'}) + '\n'
                                 if cron and final else final)
@@ -180,7 +182,7 @@ class RetryDiagnosticsTests(unittest.TestCase):
                     self.assertEqual(output, expected)
 
     def test_exhaustion_and_rollover_retain_buffered_attempt_diagnostics(self):
-        failure = subprocess.CompletedProcess([], 255, b'DUMMY-SECRET', b'DUMMY-SECRET')
+        failure = transport('connection_closed')
         for sleep, expected, count in ((None, 'retries_exhausted', 3),
                 (lambda clock: clock.__setitem__(0, 102 * 3600 + 1), 'hour_rollover', 1)):
             with self.subTest(expected=expected):

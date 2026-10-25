@@ -29,6 +29,10 @@ func TestClassifyRoute(t *testing.T) {
 		{name: "admin excluded", method: "POST", target: "/api/v1/admin/chat/completions", eligible: false, protocol: ProtocolAnthropic},
 		{name: "read excluded", method: "GET", target: "/v1/messages", eligible: false, protocol: ProtocolAnthropic},
 		{name: "unknown post", method: "POST", target: "/api/v1/ping", eligible: false, protocol: ProtocolAnthropic},
+		// System One is a native JSON invocation, not an OpenAI/Anthropic protocol.
+		{name: "systemone invocation", method: "POST", target: "/v1/systemone?trace=1", eligible: true, protocol: ProtocolUnknown},
+		{name: "systemone read excluded", method: "GET", target: "/v1/systemone", eligible: false, protocol: ProtocolUnknown},
+		{name: "systemone admin excluded", method: "POST", target: "/admin/systemone", eligible: false, protocol: ProtocolUnknown},
 	}
 	for _, test := range tests {
 		test := test

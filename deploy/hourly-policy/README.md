@@ -22,6 +22,24 @@ validation.
 - Existing recovery-window guards, group-8 bootstrap and severity thresholds are
   unchanged. No bulk policy reset is performed.
 
+### Temporary suspension of automatic Luna
+
+Optional remote `<state-dir>/config.json` contains exactly
+`{"luna_enabled": false}` to suspend automatic Luna indefinitely, until an
+operator explicitly restores `true` (no expiry). Missing config preserves the
+original enabled behavior; invalid config fails closed. The >20M Terra cap stays
+in force even above 50M. Managed users whose live policy matches stored Luna are
+relaxed to Terra, including a rerun of the already-processed hour; this preserves
+zero-window evidence and does not grant Full. Normal eight-zero-hour recovery is
+unchanged. Unmanaged/manual policy drift still aborts without writes. A pending
+Luna escalation is preserved and blocks execution for operator reconciliation;
+valid Terra relaxation journals retain normal readback and retry semantics.
+
+Install only after independent review and verification of the active API target
+and state directory. Do not overwrite an immutable old controller release or
+point the default Docker discovery at an inactive gateway. Update configuration
+atomically while holding the controller's state-directory lock.
+
 ### Model targets and channel migration
 
 The persisted/API policy name `terra` now caps rank-above-3 text models to
@@ -111,10 +129,26 @@ installation; the controller is not a universal auto-configurator.
 Successful cron transitions emit only `email`, `from`, `to`; no-change runs are
 silent, including successful retries. Failed-attempt diagnostics are buffered:
 success emits only the successful attempt's stdout; three failed attempts emit
-all sanitized attempt diagnostics followed by `retries_exhausted`. Hour/deadline
-guard exits retain prior attempt diagnostics followed by the guard error.
-The 900-second total budget, attempt bounds, pinned hour and process-group
-cleanup are unchanged.
+all sanitized attempt diagnostics followed by `retries_exhausted`. Attempts are
+scheduled at monotonic offsets **0, 300, 630 seconds** from the first attempt's
+budget start, not relative delays after failures. This spreads fast connection
+failures across ten and a half minutes while preserving up to 269 seconds of
+process time plus a one-second cleanup reserve per attempt within the existing
+900-second total budget. Sleeps and attempt timeouts are clipped/refused at the
+pinned hour boundary; an overslept deadline cannot launch another attempt.
+Only SSH exit 255 with a transient static classification (`timeout`, `refused`,
+`network_unreachable`, `connection_closed`) is retried. Unknown/auth/host-key
+failures, remote application errors, unexpected successful stderr, local process
+errors, output-limit failures and local watchdog expiry terminate with
+`non_retryable_failure`. A local watchdog expiry is not proof of an SSH transport
+failure. Pending journals remain untouched for reconciliation. Permanent security
+classifications take precedence over transient words in the captured prefix.
+Hour/deadline guard exits retain prior diagnostics followed by the guard error.
+The pinned hour, remote idempotency, byte bounds and process-group cleanup remain
+unchanged. A 15-minute retry budget starting at :05 cannot outwait a sustained
+outage through :22; this is dispersed retry, not a guarantee against that outage.
+Before installation, verify the scheduler's **script** timeout exceeds 900 seconds
+plus startup/diagnostic overhead (agent inactivity timeouts are a different limit).
 
 SSH diagnostics expose only static `ssh_error` codes: `timeout`, `refused`,
 `network_unreachable`, `auth_failed`, `host_key`, `connection_closed`, `unknown`.
@@ -158,3 +192,23 @@ source paths. Tests use temporary state, fake APIs, local loopback HTTP fixtures
 and bounded local subprocesses; no real deployment SSH is performed.
 
 See [TESTING.md](TESTING.md) for the recorded RED/GREEN checks.
+
+### Temporary Terra suspension
+
+The state-directory config also accepts `{"luna_enabled": true, "terra_enabled": false}`.
+Missing `terra_enabled` defaults to true. With this setting, >20M does not escalate;
+>50M still escalates to Luna. Matching controller-managed Terra users relax to Full
+unless their latest complete hour exceeds 50M (then Luna), including same-hour reruns.
+Luna retains the eight-complete-zero-hour recovery rule. Manual policy drift and
+pending Terra escalations fail closed. Do not disable both flags together; that
+combination is not supported. Restore Terra only on explicit user instruction by
+setting `terra_enabled` to true; do not restore old state snapshots.
+
+### Luna recovery duration
+
+`luna_recovery_hours` accepts integer 8 (backwards-compatible default) or 12.
+The active policy uses `{"luna_enabled": true, "terra_enabled": false, "luna_recovery_hours": 12}`.
+Luna requires 12 consecutive complete zero-token hours across all OpenAI keys,
+including cache tokens. Valid prior windows are retained; positive usage or missing
+hours breaks the streak. Pending recovery intents with only eight windows are rejected
+under the 12-hour setting. Terra recovery, if enabled later, remains eight hours.
