@@ -193,6 +193,10 @@ func (w *Worker) processDeadLetters(ctx context.Context, now time.Time) (WorkerS
 			continue
 		}
 		changed := false
+		if manifest.EnqueuedAt == nil || manifest.EnqueuedAt.IsZero() {
+			manifest.EnqueuedAt = timePointer(info.ModTime().UTC())
+			changed = true
+		}
 		if manifest.FirstFailedAt == nil {
 			manifest.FirstFailedAt = timePointer(deadLetterFirstFailure(manifest, info.ModTime()))
 			changed = true
@@ -240,7 +244,7 @@ func (w *Worker) processDeadLetters(ctx context.Context, now time.Time) (WorkerS
 				continue
 			}
 		}
-		result, err := w.processCandidate(ctx, manifestCandidate{path: path, deadLetter: true, preflightErr: validationErr}, now)
+		result, err := w.processCandidate(ctx, manifestCandidate{path: path, deadLetter: true, preflightErr: validationErr}, w.options.Now().UTC())
 		stats.Claimed += result.Claimed
 		stats.Succeeded += result.Succeeded
 		stats.DeadLettered += result.DeadLettered

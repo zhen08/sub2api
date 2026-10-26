@@ -8,8 +8,11 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"os"
+	"path/filepath"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -373,6 +376,177 @@ func TestDurableProcessorPostgreSQLMinIOIntegration(t *testing.T) {
 	_ = reader.Close()
 	if err != nil || !json.Valid(decoded) {
 		t.Fatalf("stored artifact is not valid gzip JSON: %v", err)
+	}
+
+	t.Run("FIFOConcurrentDurableQueue", func(t *testing.T) {
+		testFIFOConcurrentDurableQueue(t, ctx, store, objects, manifest)
+	})
+}
+
+func testFIFOConcurrentDurableQueue(t *testing.T, ctx context.Context, store *PostgreSQLStore, objects *ObjectStore, template Manifest) {
+	t.Helper()
+	queueSpool, err := NewSpool(t.TempDir(), 1<<20)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Reuse the isolated test database and S3 bucket, but give this worker its
+	// own spool so complete cleanup can be checked independently of direct writes.
+	queueObjects := &ObjectStore{client: objects.client, spool: queueSpool, cfg: objects.cfg}
+	processor, err := NewDurableProcessor(store, queueObjects)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const bundleCount = 8
+	manifests := make([]Manifest, 0, bundleCount)
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		for _, manifest := range manifests {
+			// Deterministic keys also clean up uploads left by a failed DB commit.
+			for _, artifact := range manifest.Artifacts {
+				key, err := BuildLegacyObjectKey(objects.cfg.Prefix, manifest.CreatedAt, manifest.APIKeyID, manifest.RequestID, artifact.Kind, artifact.Sequence)
+				if err == nil {
+					_ = objects.Delete(cleanupCtx, objects.cfg.Bucket, key)
+				}
+			}
+			_, _ = store.db.ExecContext(cleanupCtx, `DELETE FROM audit_artifacts WHERE request_id=$1`, manifest.RequestID)
+			_, _ = store.db.ExecContext(cleanupCtx, `DELETE FROM audit_calls WHERE request_id=$1`, manifest.RequestID)
+		}
+	})
+	now := time.Now().UTC()
+	suffix := uuid.NewString()
+	for index := range bundleCount {
+		manifest := template
+		// Reverse lexical order so old UUID/name ordering selects the wrong batch.
+		manifest.RequestID = fmt.Sprintf("sub2api-audit-fifo-it-%02d-%s", bundleCount-index, suffix)
+		manifest.Artifacts = nil
+		for artifactIndex, kind := range []ArtifactKind{ArtifactClientRequest, ArtifactUpstreamRequest, ArtifactUpstreamRequest, ArtifactResponse} {
+			sequence := 0
+			if artifactIndex == 2 {
+				sequence = 1
+			}
+			artifact, err := queueSpool.WriteArtifact(manifest.CreatedAt, manifest.RequestID, kind, sequence, map[string]int{"bundle": index, "artifact": artifactIndex})
+			if err != nil {
+				t.Fatal(err)
+			}
+			manifest.Artifacts = append(manifest.Artifacts, artifact)
+		}
+		manifests = append(manifests, manifest)
+		path, err := queueSpool.CommitManifest(manifest)
+		if err != nil {
+			t.Fatal(err)
+		}
+		queued, err := queueSpool.LoadManifest(path)
+		if err != nil {
+			t.Fatal(err)
+		}
+		queued.EnqueuedAt = timePointer(now.Add(time.Duration(index-bundleCount) * time.Minute))
+		writeTestManifest(t, filepath.Join(queueSpool.Root(), path), queued)
+	}
+
+	var active, peak, started atomic.Int32
+	firstPairReady := make(chan struct{})
+	concurrentProcessor := ProcessorFunc(func(processCtx context.Context, manifest Manifest) error {
+		count := active.Add(1)
+		defer active.Add(-1)
+		for previous := peak.Load(); count > previous && !peak.CompareAndSwap(previous, count); previous = peak.Load() {
+		}
+		// Force both initial slots to be occupied before real PostgreSQL/S3 work.
+		// This fails if concurrency silently regresses to a sequential worker.
+		if ordinal := started.Add(1); ordinal <= 2 {
+			if ordinal == 2 {
+				close(firstPairReady)
+			}
+			select {
+			case <-firstPairReady:
+			case <-processCtx.Done():
+				return processCtx.Err()
+			}
+		}
+		return processor.Process(processCtx, manifest)
+	})
+	options := testWorkerOptions(&now)
+	options.Concurrency = 2
+	options.BatchSize = 3
+	worker, err := NewWorker(queueSpool, concurrentProcessor, options)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for completed := 0; completed < bundleCount; {
+		want := min(options.BatchSize, bundleCount-completed)
+		stats, err := worker.ProcessOnce(ctx)
+		if err != nil || stats.Claimed != want || stats.Succeeded != want || stats.Retried != 0 || stats.DeadLettered != 0 {
+			t.Fatalf("concurrent durable pass = %+v, err=%v, want %d successes", stats, err, want)
+		}
+		completed += want
+		for index, manifest := range manifests {
+			var stored bool
+			if err := store.db.QueryRowContext(ctx, `SELECT EXISTS(SELECT 1 FROM audit_calls WHERE request_id=$1 AND capture_status='stored')`, manifest.RequestID).Scan(&stored); err != nil {
+				t.Fatal(err)
+			}
+			if stored != (index < completed) {
+				t.Fatalf("FIFO batch completed %d bundles but bundle %d stored=%v", completed, index, stored)
+			}
+		}
+	}
+	if peak.Load() != 2 || started.Load() != bundleCount || active.Load() != 0 {
+		t.Fatalf("storage execution peak=%d started=%d active=%d", peak.Load(), started.Load(), active.Load())
+	}
+	for index, manifest := range manifests {
+		var total, unique int
+		if err := store.db.QueryRowContext(ctx, `SELECT count(*), count(DISTINCT (kind, sequence)) FROM audit_artifacts WHERE request_id=$1`, manifest.RequestID).Scan(&total, &unique); err != nil {
+			t.Fatal(err)
+		}
+		if total != len(manifest.Artifacts) || unique != total {
+			t.Fatalf("bundle %d artifacts total=%d unique=%d, want %d", index, total, unique, len(manifest.Artifacts))
+		}
+		for artifactIndex, artifact := range manifest.Artifacts {
+			var key, storedSHA string
+			var storedBytes int64
+			if err := store.db.QueryRowContext(ctx, `SELECT object_key, sha256, bytes FROM audit_artifacts WHERE request_id=$1 AND kind=$2 AND sequence=$3`, manifest.RequestID, string(artifact.Kind), artifact.Sequence).Scan(&key, &storedSHA, &storedBytes); err != nil {
+				t.Fatal(err)
+			}
+			object, err := objects.client.GetObject(ctx, &s3.GetObjectInput{Bucket: aws.String(objects.cfg.Bucket), Key: aws.String(key)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			compressed, readErr := io.ReadAll(object.Body)
+			_ = object.Body.Close()
+			if readErr != nil {
+				t.Fatal(readErr)
+			}
+			digest := sha256.Sum256(compressed)
+			if storedSHA != hex.EncodeToString(digest[:]) || storedBytes != int64(len(compressed)) || object.Metadata[S3MetadataRequestID] != manifest.RequestID || object.Metadata[S3MetadataArtifactKind] != string(artifact.Kind) {
+				t.Fatalf("bundle %d artifact %d durable metadata mismatch", index, artifactIndex)
+			}
+			reader, err := gzip.NewReader(bytes.NewReader(compressed))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var payload map[string]int
+			decodeErr := json.NewDecoder(reader).Decode(&payload)
+			_ = reader.Close()
+			if decodeErr != nil || payload["bundle"] != index || payload["artifact"] != artifactIndex {
+				t.Fatalf("bundle %d artifact %d payload=%v err=%v", index, artifactIndex, payload, decodeErr)
+			}
+		}
+	}
+	for _, directory := range []string{spoolReadyDir, spoolRetryDir, spoolProcessingDir, spoolCompletedDir, spoolDeadDir} {
+		paths, err := queueSpool.listManifestPaths(directory)
+		if err != nil || len(paths) != 0 {
+			t.Fatalf("queue directory %s retained manifests=%v err=%v", directory, paths, err)
+		}
+	}
+	if err := filepath.WalkDir(filepath.Join(queueSpool.Root(), spoolArtifactsDir), func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if !entry.IsDir() {
+			return fmt.Errorf("completed queue retained artifact %s", path)
+		}
+		return nil
+	}); err != nil {
+		t.Fatal(err)
 	}
 }
 

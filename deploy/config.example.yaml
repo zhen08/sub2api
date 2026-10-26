@@ -1343,6 +1343,8 @@ call_audit:
     enabled: true
     max_attempts: 5
     batch_size: 10
+    # 按入队时间 FIFO 领取，最多同时处理 2 条；合法范围 1–16。
+    concurrency: 2
     poll_interval_ms: 1000
     retry_initial_delay_ms: 1000
     retry_max_delay_ms: 300000

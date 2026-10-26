@@ -89,6 +89,33 @@ change as expected, and the persistent spool drains after recovery.
 
 Legacy client prefixes are direct aliases: `/api/v1`, `/claude/v1`, `/openai/v1`, `/antigravity/api/v1`, and `/gemini-cli/api/v1`. They reuse the canonical handlers and create one audit call per inbound request.
 
+## FIFO queue and bounded concurrency
+
+Ready bundles and due retries share a FIFO queue ordered by the persisted
+`enqueuedAt` timestamp, written when the manifest is committed. Request start
+time and random request IDs do not determine queue order. Retries retain their
+original queue position but are eligible only after `nextAttemptAt`. Legacy
+manifests use their existing file modification time until the worker persists
+that fallback; the original enqueue time cannot be reconstructed for them.
+
+`CALL_AUDIT_WORKER_CONCURRENCY` (`call_audit.worker.concurrency`) defaults to 2
+and accepts 1–16. Claims are issued in FIFO order; completion order may differ.
+Storage work runs concurrently, while claims, state transitions and callbacks
+remain serialized under one spool owner. A completed slot immediately admits
+the next eligible bundle within the normal batch budget. Increasing batch size
+alone does not increase concurrency. Each ordinary storage attempt receives a
+context deadline from `CALL_AUDIT_WORKER_CLAIM_TIMEOUT_SECONDS` (default 300
+seconds), honored by PostgreSQL and S3 operations; filesystem calls such as
+`fsync` cannot be interrupted by a Go context.
+
+Queue age uses persisted enqueue time across claims and retries, so a claim
+does not reset the pending-age alert. The worker waits for dispatched work to
+finish or honor cancellation before releasing spool ownership. This ownership
+is process-local: never run two containers against the same spool directory.
+For an upgrade, drain active requests and queued work, stop the old owner, then
+start the new version with the persistent directory retained. No database schema
+change is required; older binaries ignore the additional manifest field.
+
 ## Dead-letter recovery and alerts
 
 With capture and the local worker enabled, dead-letter recovery is enabled by
@@ -98,7 +125,7 @@ two due bundles processed per worker pass. Normal ready/retry work retains its
 own batch budget. The retry count and failure timestamps are persisted in the
 manifest, so a process restart does not renew the retry allowance.
 
-Slow retries share the sequential audit worker. Each attempt's storage work is
+Slow retries run sequentially after the normal concurrent batch. Each attempt's storage work is
 limited to 30 seconds (or the shorter claim timeout), with separate bounded
 failed-status synchronization. A default historical batch can therefore delay
 the next audit batch by about a minute when storage times out. Inference remains
@@ -113,8 +140,8 @@ retryable failure codes, after their local bundle has been validated. Keep a
 private backup before any manual repair; successful processing removes the
 original local spool bundle after durable storage completes.
 
-The worker owns failed-status reconciliation and slow retries in one execution
-sequence. A separate maintenance scan cannot overwrite a successfully stored
+The worker coordinator owns failed-status reconciliation and slow retries in one
+execution sequence. A separate maintenance scan cannot overwrite a successfully stored
 call as failed. A dead letter being recovered still makes audit readiness
 degraded until its durable commit finishes. Exhausted and permanent records
 remain unhealthy until repaired; neither the recovery worker nor alerts delete

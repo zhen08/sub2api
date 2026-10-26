@@ -174,12 +174,15 @@ type Manifest struct {
 	Artifacts        []ArtifactRef  `json:"artifacts"`
 	Meta             map[string]any `json:"meta,omitempty"`
 	EventSpoolPath   string         `json:"eventSpoolPath,omitempty"`
-	Attempts         int            `json:"attempt,omitempty"`
-	NextAttemptAt    *time.Time     `json:"nextAttemptAt,omitempty"`
-	ClaimedAt        *time.Time     `json:"claimedAt,omitempty"`
-	LastAttemptAt    *time.Time     `json:"lastAttemptAt,omitempty"`
-	FailedAt         *time.Time     `json:"failedAt,omitempty"`
-	LastErrorCode    string         `json:"lastErrorCode,omitempty"`
+	// EnqueuedAt records the first durable queue admission, independently of
+	// the request's start time. Keep it across claims, retries and restarts.
+	EnqueuedAt    *time.Time `json:"enqueuedAt,omitempty"`
+	Attempts      int        `json:"attempt,omitempty"`
+	NextAttemptAt *time.Time `json:"nextAttemptAt,omitempty"`
+	ClaimedAt     *time.Time `json:"claimedAt,omitempty"`
+	LastAttemptAt *time.Time `json:"lastAttemptAt,omitempty"`
+	FailedAt      *time.Time `json:"failedAt,omitempty"`
+	LastErrorCode string     `json:"lastErrorCode,omitempty"`
 	// These fields survive every queue transition and process restart. Slow
 	// dead-letter retries are a separate, bounded budget from initial retries.
 	DeadLetterRetries    int        `json:"deadLetterRetries,omitempty"`

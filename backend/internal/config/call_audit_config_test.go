@@ -10,9 +10,37 @@ func TestLoadCallAuditDefaults(t *testing.T) {
 	}
 	if cfg.CallAudit.Enabled || cfg.CallAudit.RetentionDays != 180 || cfg.CallAudit.FailurePolicy != "nonblocking" ||
 		cfg.CallAudit.SpoolDir != "/app/data/audit-spool" || cfg.CallAudit.ObjectKeyPrefix != "ai-call-audit" ||
-		!cfg.CallAudit.Worker.Enabled || cfg.CallAudit.Worker.MaxAttempts != 5 || cfg.CallAudit.S3.Bucket != "ai-call-audit" ||
+		!cfg.CallAudit.Worker.Enabled || cfg.CallAudit.Worker.MaxAttempts != 5 || cfg.CallAudit.Worker.Concurrency != 2 || cfg.CallAudit.S3.Bucket != "ai-call-audit" ||
 		cfg.CallAudit.S3.Region != "us-east-1" || !cfg.CallAudit.S3.ForcePathStyle {
 		t.Fatalf("call audit defaults = %+v", cfg.CallAudit)
+	}
+}
+
+func TestLoadCallAuditWorkerConcurrency(t *testing.T) {
+	for _, test := range []struct {
+		value string
+		want  int
+	}{
+		{"1", 1}, {"2", 2}, {"16", 16}, {"0", 0}, {"-1", 0}, {"17", 0},
+	} {
+		t.Run(test.value, func(t *testing.T) {
+			resetViperWithJWTSecret(t)
+			t.Setenv("CALL_AUDIT_ENABLED", "true")
+			t.Setenv("CALL_AUDIT_WORKER_CONCURRENCY", test.value)
+			cfg, err := Load()
+			if test.want == 0 {
+				if err == nil {
+					t.Fatal("invalid worker concurrency was accepted")
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if cfg.CallAudit.Worker.Concurrency != test.want {
+				t.Fatalf("worker concurrency = %d, want %d", cfg.CallAudit.Worker.Concurrency, test.want)
+			}
+		})
 	}
 }
 

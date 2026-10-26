@@ -166,6 +166,7 @@ func NewRuntime(cfg *config.Config) *Runtime {
 		worker, workerErr := NewWorker(spool, processor, WorkerOptions{
 			MaxAttempts:       runtime.cfg.Worker.MaxAttempts,
 			BatchSize:         runtime.cfg.Worker.BatchSize,
+			Concurrency:       runtime.cfg.Worker.Concurrency,
 			PollInterval:      time.Duration(runtime.cfg.Worker.PollIntervalMS) * time.Millisecond,
 			RetryInitialDelay: time.Duration(runtime.cfg.Worker.RetryInitialDelayMS) * time.Millisecond,
 			RetryMaxDelay:     time.Duration(runtime.cfg.Worker.RetryMaxDelayMS) * time.Millisecond,
@@ -603,8 +604,16 @@ func (r *Runtime) populateSpoolSnapshot(snapshot *RuntimeSnapshot) {
 		}
 		snapshot.Backlog += len(paths)
 		for _, path := range paths {
-			if info, err := os.Stat(path); err == nil && (oldest.IsZero() || info.ModTime().Before(oldest)) {
-				oldest = info.ModTime()
+			info, err := os.Stat(path)
+			if err != nil {
+				continue
+			}
+			queuedAt := info.ModTime()
+			if manifest, err := r.spool.LoadManifest(path); err == nil && manifest.EnqueuedAt != nil && !manifest.EnqueuedAt.IsZero() {
+				queuedAt = *manifest.EnqueuedAt
+			}
+			if oldest.IsZero() || queuedAt.Before(oldest) {
+				oldest = queuedAt
 			}
 		}
 	}

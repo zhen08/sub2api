@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"sort"
 	"strings"
 	"time"
 )
@@ -48,6 +49,7 @@ func Permanent(code string, err error) error {
 type WorkerOptions struct {
 	MaxAttempts       int
 	BatchSize         int
+	Concurrency       int
 	PollInterval      time.Duration
 	RetryInitialDelay time.Duration
 	RetryMaxDelay     time.Duration
@@ -96,6 +98,14 @@ func NewWorker(spool *Spool, processor ManifestProcessor, options WorkerOptions)
 	}
 	if options.RetryMaxDelay < options.RetryInitialDelay {
 		return nil, fmt.Errorf("audit retry maximum delay must be >= initial delay")
+	}
+	// A zero value keeps callers built before concurrency was introduced
+	// sequential. Explicit limits are deliberately small to bound storage load.
+	if options.Concurrency == 0 {
+		options.Concurrency = 1
+	}
+	if options.Concurrency < 1 || options.Concurrency > 16 {
+		return nil, fmt.Errorf("audit worker concurrency must be between 1 and 16")
 	}
 	if options.DeadLetterRetry.Enabled && (options.DeadLetterRetry.MaxRetries <= 0 ||
 		options.DeadLetterRetry.BatchSize <= 0 || options.DeadLetterRetry.InitialDelay <= 0 ||
@@ -147,6 +157,9 @@ func (w *Worker) ProcessOnce(ctx context.Context) (WorkerStats, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
+	if err := ctx.Err(); err != nil {
+		return WorkerStats{}, err
+	}
 	now := w.options.Now().UTC()
 	w.publishDeadLetterSnapshot(now)
 	defer func() { w.publishDeadLetterSnapshot(w.options.Now().UTC()) }()
@@ -170,23 +183,18 @@ func (w *Worker) ProcessOnce(ctx context.Context) (WorkerStats, error) {
 	if len(candidates) > w.options.BatchSize {
 		candidates = candidates[:w.options.BatchSize]
 	}
-	for _, candidate := range candidates {
-		if err := ctx.Err(); err != nil {
-			return stats, errors.Join(joined, err)
-		}
-		result, err := w.processCandidate(ctx, candidate, now)
-		if err != nil {
-			joined = errors.Join(joined, err)
-			w.options.OnError(err)
-		}
-		stats.Claimed += result.Claimed
-		stats.Succeeded += result.Succeeded
-		stats.Retried += result.Retried
-		stats.DeadLettered += result.DeadLettered
+	liveStats, liveErr := w.processCandidates(ctx, candidates)
+	stats.Claimed += liveStats.Claimed
+	stats.Succeeded += liveStats.Succeeded
+	stats.Retried += liveStats.Retried
+	stats.DeadLettered += liveStats.DeadLettered
+	joined = errors.Join(joined, liveErr)
+	if err := ctx.Err(); err != nil {
+		return stats, errors.Join(joined, err)
 	}
 	// Live traffic always gets its own batch before the separately bounded
 	// historical work. A dead letter receives one attempt, never a fast burst.
-	deadStats, deadErr := w.processDeadLetters(ctx, now)
+	deadStats, deadErr := w.processDeadLetters(ctx, w.options.Now().UTC())
 	stats.Claimed += deadStats.Claimed
 	stats.Succeeded += deadStats.Succeeded
 	stats.DeadLettered += deadStats.DeadLettered
@@ -196,6 +204,7 @@ func (w *Worker) ProcessOnce(ctx context.Context) (WorkerStats, error) {
 
 type manifestCandidate struct {
 	path         string
+	enqueuedAt   time.Time
 	deadLetter   bool
 	preflightErr error
 }
@@ -210,41 +219,132 @@ func (w *Worker) candidates(now time.Time) ([]manifestCandidate, error) {
 		return nil, err
 	}
 	candidates := make([]manifestCandidate, 0, len(ready)+len(retry))
-	for _, path := range ready {
-		candidates = append(candidates, manifestCandidate{path: path})
-	}
-	for _, path := range retry {
-		manifest, loadErr := w.spool.LoadManifest(path)
-		if loadErr != nil || manifest.NextAttemptAt == nil || !manifest.NextAttemptAt.After(now) {
-			candidates = append(candidates, manifestCandidate{path: path})
+	for _, paths := range [][]string{ready, retry} {
+		for _, path := range paths {
+			info, err := os.Stat(path)
+			if errors.Is(err, os.ErrNotExist) {
+				continue
+			}
+			if err != nil {
+				return nil, err
+			}
+			manifest, loadErr := w.spool.LoadManifest(path)
+			if filepath.Base(filepath.Dir(path)) == spoolRetryDir && loadErr == nil &&
+				manifest.NextAttemptAt != nil && manifest.NextAttemptAt.After(now) {
+				continue
+			}
+			// Old/corrupt manifests keep their file age. Corrupt entries are still
+			// admitted so the claim path can quarantine them without blocking FIFO.
+			enqueuedAt := manifestEnqueuedAt(manifest, info.ModTime())
+			candidates = append(candidates, manifestCandidate{path: path, enqueuedAt: enqueuedAt})
 		}
 	}
+	sort.Slice(candidates, func(i, j int) bool {
+		if candidates[i].enqueuedAt.Equal(candidates[j].enqueuedAt) {
+			return candidates[i].path < candidates[j].path
+		}
+		return candidates[i].enqueuedAt.Before(candidates[j].enqueuedAt)
+	})
 	return candidates, nil
 }
 
-func (w *Worker) processCandidate(ctx context.Context, candidate manifestCandidate, now time.Time) (WorkerStats, error) {
+func manifestEnqueuedAt(manifest Manifest, fallback time.Time) time.Time {
+	if manifest.EnqueuedAt != nil && !manifest.EnqueuedAt.IsZero() {
+		return manifest.EnqueuedAt.UTC()
+	}
+	return fallback.UTC()
+}
+
+type claimedManifest struct {
+	path         string
+	manifest     Manifest
+	deadLetter   bool
+	preflightErr error
+}
+
+type processedManifest struct {
+	claim *claimedManifest
+	err   error
+}
+
+// processCandidates keeps all queue mutations and callbacks in this goroutine.
+// Only the independent storage processor runs concurrently. The spool owner
+// lock remains held until every dispatched operation has returned, including
+// after cancellation, so another pass can never recover a live claim as stale.
+func (w *Worker) processCandidates(ctx context.Context, candidates []manifestCandidate) (WorkerStats, error) {
 	stats := WorkerStats{}
+	var joined error
+	completed := make(chan processedManifest, w.options.Concurrency)
+	next, active := 0, 0
+	recordError := func(err error) {
+		if err != nil {
+			joined = errors.Join(joined, err)
+			w.options.OnError(err)
+		}
+	}
+	for next < len(candidates) || active > 0 {
+		for next < len(candidates) && active < w.options.Concurrency && ctx.Err() == nil {
+			claim, result, err := w.claimCandidate(candidates[next], w.options.Now().UTC())
+			next++
+			stats.Claimed += result.Claimed
+			stats.DeadLettered += result.DeadLettered
+			recordError(err)
+			if claim == nil {
+				continue
+			}
+			active++
+			go func(claim *claimedManifest) {
+				completed <- processedManifest{claim: claim, err: w.executeClaim(ctx, claim)}
+			}(claim)
+		}
+		if active == 0 {
+			break
+		}
+		result := <-completed
+		active--
+		finished, err := w.finishClaim(result.claim, result.err, w.options.Now().UTC())
+		stats.Succeeded += finished.Succeeded
+		stats.Retried += finished.Retried
+		stats.DeadLettered += finished.DeadLettered
+		recordError(err)
+	}
+	return stats, joined
+}
+
+func (w *Worker) claimCandidate(candidate manifestCandidate, now time.Time) (*claimedManifest, WorkerStats, error) {
+	stats := WorkerStats{}
+	if candidate.enqueuedAt.IsZero() {
+		info, err := os.Stat(candidate.path)
+		if errors.Is(err, os.ErrNotExist) {
+			return nil, stats, nil
+		}
+		if err != nil {
+			return nil, stats, err
+		}
+		candidate.enqueuedAt = info.ModTime().UTC()
+	}
 	processingPath := filepath.Join(w.spool.root, spoolProcessingDir, filepath.Base(candidate.path))
 	if _, err := os.Lstat(processingPath); err == nil {
-		return stats, fmt.Errorf("audit processing claim already exists")
+		return nil, stats, fmt.Errorf("audit processing claim already exists")
 	} else if !errors.Is(err, os.ErrNotExist) {
-		return stats, err
+		return nil, stats, err
 	}
 	if err := renameDurable(candidate.path, processingPath); err != nil {
 		if errors.Is(err, os.ErrNotExist) {
-			return stats, nil
+			return nil, stats, nil
 		}
-		return stats, fmt.Errorf("claim audit manifest: %w", err)
+		return nil, stats, fmt.Errorf("claim audit manifest: %w", err)
 	}
 	stats.Claimed = 1
 	manifest, err := w.spool.LoadManifest(processingPath)
 	if err != nil {
 		if moveErr := w.quarantineCorrupt(processingPath); moveErr != nil {
-			return stats, errors.Join(err, moveErr)
+			return nil, stats, errors.Join(err, moveErr)
 		}
 		stats.DeadLettered = 1
-		return stats, fmt.Errorf("load claimed audit manifest: %w", err)
+		return nil, stats, fmt.Errorf("load claimed audit manifest: %w", err)
 	}
+	manifest.EnqueuedAt = timePointer(manifestEnqueuedAt(manifest, candidate.enqueuedAt))
 	manifest.State = ManifestProcessing
 	manifest.ClaimedAt = timePointer(now)
 	manifest.EventSpoolPath = w.relative(processingPath)
@@ -255,20 +355,49 @@ func (w *Worker) processCandidate(ctx context.Context, candidate manifestCandida
 		manifest.NextAttemptAt = nil
 	}
 	if err := w.writeManifest(processingPath, manifest); err != nil {
-		return stats, err
+		return nil, stats, err
 	}
 	if candidate.deadLetter {
 		w.options.OnDeadLetterRetry(manifest)
 		w.publishDeadLetterSnapshot(now)
-		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, min(w.options.ClaimTimeout, 30*time.Second))
-		defer cancel()
 	}
+	return &claimedManifest{
+		path: processingPath, manifest: manifest,
+		deadLetter: candidate.deadLetter, preflightErr: candidate.preflightErr,
+	}, stats, nil
+}
 
-	processErr := candidate.preflightErr
-	if processErr == nil {
-		processErr = w.processor.Process(ctx, manifest)
+func (w *Worker) executeClaim(ctx context.Context, claim *claimedManifest) error {
+	if claim.preflightErr != nil {
+		return claim.preflightErr
 	}
+	timeout := w.options.ClaimTimeout
+	if claim.deadLetter {
+		timeout = min(timeout, 30*time.Second)
+	}
+	ctx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+	return w.processor.Process(ctx, claim.manifest)
+}
+
+// processCandidate is the sequential slow-retry path. It shares the same
+// durable claim and completion transitions as ordinary concurrent processing.
+func (w *Worker) processCandidate(ctx context.Context, candidate manifestCandidate, now time.Time) (WorkerStats, error) {
+	claim, stats, err := w.claimCandidate(candidate, now)
+	if err != nil || claim == nil {
+		return stats, err
+	}
+	processErr := w.executeClaim(ctx, claim)
+	result, err := w.finishClaim(claim, processErr, w.options.Now().UTC())
+	stats.Succeeded += result.Succeeded
+	stats.Retried += result.Retried
+	stats.DeadLettered += result.DeadLettered
+	return stats, err
+}
+
+func (w *Worker) finishClaim(claim *claimedManifest, processErr error, now time.Time) (WorkerStats, error) {
+	stats := WorkerStats{}
+	processingPath, manifest := claim.path, claim.manifest
 	if err := processErr; err != nil {
 		// Processing failures are relevant to runtime storage health even when the
 		// durable retry/dead-letter transition itself succeeds. Report them here;
@@ -380,6 +509,7 @@ func (w *Worker) recoverStale(now time.Time) (int, error) {
 			joined = errors.Join(joined, loadErr, w.quarantineCorrupt(path))
 			continue
 		}
+		manifest.EnqueuedAt = timePointer(manifestEnqueuedAt(manifest, info.ModTime()))
 		// Completion is durable before cleanup. A crash in that window only
 		// needs local cleanup, even if the final slow attempt spent its budget.
 		if manifest.CaptureStatus == CaptureStored {

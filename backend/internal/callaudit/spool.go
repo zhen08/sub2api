@@ -255,6 +255,7 @@ func (s *Spool) CommitManifest(manifest Manifest) (string, error) {
 	manifest.Version = 1
 	manifest.State = ManifestReady
 	manifest.CaptureStatus = CapturePending
+	manifest.EnqueuedAt = timePointer(time.Now().UTC())
 	manifest.Attempts = 0
 	manifest.NextAttemptAt = nil
 	manifest.ClaimedAt = nil

@@ -1843,6 +1843,7 @@ type CallAuditWorkerConfig struct {
 	Enabled             bool                           `mapstructure:"enabled"`
 	MaxAttempts         int                            `mapstructure:"max_attempts"`
 	BatchSize           int                            `mapstructure:"batch_size"`
+	Concurrency         int                            `mapstructure:"concurrency"`
 	PollIntervalMS      int                            `mapstructure:"poll_interval_ms"`
 	RetryInitialDelayMS int                            `mapstructure:"retry_initial_delay_ms"`
 	RetryMaxDelayMS     int                            `mapstructure:"retry_max_delay_ms"`
@@ -1921,6 +1922,7 @@ func load(allowMissingJWTSecret bool) (*Config, error) {
 		"call_audit.worker.enabled":                                 {"CALL_AUDIT_WORKER_ENABLED", "AUDIT_WORKER_ENABLED"},
 		"call_audit.worker.max_attempts":                            {"CALL_AUDIT_WORKER_MAX_ATTEMPTS", "AUDIT_MAX_ATTEMPTS"},
 		"call_audit.worker.batch_size":                              {"CALL_AUDIT_WORKER_BATCH_SIZE"},
+		"call_audit.worker.concurrency":                             {"CALL_AUDIT_WORKER_CONCURRENCY"},
 		"call_audit.worker.poll_interval_ms":                        {"CALL_AUDIT_WORKER_POLL_INTERVAL_MS"},
 		"call_audit.worker.retry_initial_delay_ms":                  {"CALL_AUDIT_WORKER_RETRY_INITIAL_DELAY_MS"},
 		"call_audit.worker.retry_max_delay_ms":                      {"CALL_AUDIT_WORKER_RETRY_MAX_DELAY_MS"},
@@ -2539,6 +2541,7 @@ func setDefaults() {
 	viper.SetDefault("call_audit.worker.enabled", true)
 	viper.SetDefault("call_audit.worker.max_attempts", 5)
 	viper.SetDefault("call_audit.worker.batch_size", 10)
+	viper.SetDefault("call_audit.worker.concurrency", 2)
 	viper.SetDefault("call_audit.worker.poll_interval_ms", 1000)
 	viper.SetDefault("call_audit.worker.retry_initial_delay_ms", 1000)
 	viper.SetDefault("call_audit.worker.retry_max_delay_ms", 300000)
@@ -3018,6 +3021,9 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("call_audit.retention_cleanup_enabled is not available in the initial rollout; use call-audit-migrate --retention-dry-run")
 	}
 	if c.CallAudit.Enabled && c.CallAudit.Worker.Enabled {
+		if c.CallAudit.Worker.Concurrency < 1 || c.CallAudit.Worker.Concurrency > 16 {
+			return fmt.Errorf("call_audit.worker.concurrency must be between 1 and 16")
+		}
 		if c.CallAudit.Worker.MaxAttempts <= 0 || c.CallAudit.Worker.BatchSize <= 0 ||
 			c.CallAudit.Worker.PollIntervalMS <= 0 || c.CallAudit.Worker.RetryInitialDelayMS <= 0 ||
 			c.CallAudit.Worker.RetryMaxDelayMS < c.CallAudit.Worker.RetryInitialDelayMS ||
