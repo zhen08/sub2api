@@ -1994,11 +1994,12 @@ func TestOpenAIUserModelPolicyActualCharge(t *testing.T) {
 				svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, &openAIRecordUsageSubRepoStub{}, nil)
 				// Deliberately distinct fixture prices prove which model was charged.
 				svc.billingService = NewBillingService(svc.cfg, &PricingService{pricingData: map[string]*LiteLLMModelPricing{
-					"gpt-6-astra": {InputCostPerToken: 9e-6, OutputCostPerToken: 9e-6},
-					"gpt-5.6-sol": {InputCostPerToken: 7e-6, OutputCostPerToken: 7e-6},
-					"gpt-6.1-sol": {InputCostPerToken: 2e-6, OutputCostPerToken: 2e-6},
-					"gpt-6-sol":   {InputCostPerToken: 3e-6, OutputCostPerToken: 3e-6},
-					"gpt-6-luna":  {InputCostPerToken: 1e-6, OutputCostPerToken: 1e-6},
+					"gpt-6-astra":   {InputCostPerToken: 9e-6, OutputCostPerToken: 9e-6},
+					"gpt-5.6-sol":   {InputCostPerToken: 7e-6, OutputCostPerToken: 7e-6},
+					"gpt-6.1-sol":   {InputCostPerToken: 2e-6, OutputCostPerToken: 2e-6},
+					"gpt-6.1-terra": {InputCostPerToken: 1.5e-6, OutputCostPerToken: 1.5e-6},
+					"gpt-6-sol":     {InputCostPerToken: 3e-6, OutputCostPerToken: 3e-6},
+					"gpt-6-luna":    {InputCostPerToken: 1e-6, OutputCostPerToken: 1e-6},
 				}})
 				svc.settingService = NewSettingService(&userModelPolicyRepo{values: map[string]string{}}, nil)
 				identity := WithOpenAIUserModelPolicy(context.Background(), 17, nil)
@@ -2017,7 +2018,7 @@ func TestOpenAIUserModelPolicyActualCharge(t *testing.T) {
 					want = "gpt-5.6-sol"
 				}
 				if level == "terra" {
-					want = "gpt-6.1-sol"
+					want = "gpt-6.1-terra"
 				}
 				if level == "luna" {
 					want = "gpt-6-luna"

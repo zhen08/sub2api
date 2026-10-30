@@ -25,7 +25,7 @@ func TestOpenAIUserModelPolicySolFinalHTTP(t *testing.T) {
 			group := int64(6)
 			identity := WithOpenAIUserModelPolicy(context.Background(), 10, &group)
 			account := &Account{ID: 1, Platform: PlatformOpenAI, Type: AccountTypeAPIKey, Credentials: map[string]any{"model_mapping": map[string]any{
-				"gpt-6.1-sol": "gpt-6.1-sol", "gpt-6-luna": "gpt-6.1-sol",
+				"gpt-6.1-terra": "gpt-6.1-sol", "gpt-6.1-sol": "gpt-6.1-sol", "gpt-6-luna": "gpt-6.1-sol",
 			}}}
 			// The same authenticated identity sees each durable policy change.
 			for _, level := range []string{"original", "terra", "luna", "full"} {
@@ -35,6 +35,9 @@ func TestOpenAIUserModelPolicySolFinalHTTP(t *testing.T) {
 						require.NoError(t, err)
 					}
 					want := "gpt-6.1-sol"
+					if level == "terra" {
+						want = "gpt-6.1-terra"
+					}
 					if level == "luna" {
 						want = "gpt-6-luna"
 					}
@@ -59,7 +62,7 @@ func TestOpenAIUserModelPolicySolFinalHTTP(t *testing.T) {
 					result := &OpenAIForwardResult{Model: "gpt-6.1-sol", UpstreamModel: mapped, BillingModel: mapped}
 					finish(result)
 					if level == "terra" {
-						assertSol61DispatchCharge(t, result)
+						assertTerra61DispatchCharge(t, result)
 					}
 					require.Equal(t, "gpt-6.1-sol", result.Model)
 					require.Equal(t, want, result.UpstreamModel)
@@ -77,11 +80,12 @@ func TestOpenAIUserModelPolicySolFinalHTTP(t *testing.T) {
 
 func TestOpenAIUserModelPolicySolRank(t *testing.T) {
 	for _, tc := range []struct{ model, terra, luna string }{
-		{"gpt-6-astra", "gpt-6.1-sol", "gpt-6-luna"},
-		{"gpt-5.6-sol", "gpt-6.1-sol", "gpt-6-luna"},
-		{"gpt-6-sol", "gpt-6-sol", "gpt-6-luna"},
-		{"gpt-6.1-sol", "gpt-6.1-sol", "gpt-6-luna"},
-		{"gpt-5.6-terra", "gpt-6.1-sol", "gpt-6-luna"},
+		{"gpt-6.1-terra", "gpt-6.1-terra", "gpt-6-luna"},
+		{"gpt-6-astra", "gpt-6.1-terra", "gpt-6-luna"},
+		{"gpt-5.6-sol", "gpt-6.1-terra", "gpt-6-luna"},
+		{"gpt-6-sol", "gpt-6.1-terra", "gpt-6-luna"},
+		{"gpt-6.1-sol", "gpt-6.1-terra", "gpt-6-luna"},
+		{"gpt-5.6-terra", "gpt-6.1-terra", "gpt-6-luna"},
 		{"gpt-5.6-luna", "gpt-5.6-luna", "gpt-6-luna"},
 		{"gpt-6-luna", "gpt-6-luna", "gpt-6-luna"},
 	} {
@@ -104,7 +108,7 @@ func TestOpenAIUserModelPolicySolAliases(t *testing.T) {
 			require.Equal(t, "gpt-6-sol", normalizeKnownOpenAICodexModel(model))
 			require.Equal(t, "gpt-6-sol", normalizeCodexModel(model))
 			require.False(t, isOpenAIGPT6AstraModel(model))
-			require.Equal(t, "gpt-6-sol", clampUserOpenAIModel("terra", model))
+			require.Equal(t, "gpt-6.1-terra", clampUserOpenAIModel("terra", model))
 			require.Equal(t, "gpt-6-luna", clampUserOpenAIModel("luna", model))
 			require.Equal(t, "gpt-6-sol", clampUserOpenAIModel("full", model))
 			require.Equal(t, model, clampUserOpenAIModel("original", model))
@@ -131,7 +135,7 @@ func TestOpenAIUserModelPolicySol61Aliases(t *testing.T) {
 			require.Equal(t, "gpt-6.1-sol", normalizeKnownOpenAICodexModel(model))
 			require.Equal(t, "gpt-6.1-sol", normalizeCodexModel(model))
 			require.False(t, isOpenAIGPT6AstraModel(model))
-			require.Equal(t, "gpt-6.1-sol", clampUserOpenAIModel("terra", model))
+			require.Equal(t, "gpt-6.1-terra", clampUserOpenAIModel("terra", model))
 			require.Equal(t, "gpt-6-luna", clampUserOpenAIModel("luna", model))
 			require.Equal(t, "gpt-6.1-sol", clampUserOpenAIModel("full", model))
 			require.Equal(t, model, clampUserOpenAIModel("original", model))
@@ -149,5 +153,17 @@ func TestOpenAIUserModelPolicySol61Aliases(t *testing.T) {
 				require.Equal(t, model, clampUserOpenAIModel(level, model))
 			}
 		})
+	}
+}
+
+func TestOpenAIUserModelPolicyTerra61Aliases(t *testing.T) {
+	for _, model := range []string{"gpt-6.1-terra", "openai/GPT_6.1_TERRA", "gpt-6.1-terra-high", "gpt-6.1-terra-2026-10-30", "gpt-6.1-terra-openai-compact"} {
+		require.Equal(t, "gpt-6.1-terra", clampUserOpenAIModel("terra", model), model)
+		require.Equal(t, "gpt-6-luna", clampUserOpenAIModel("luna", model), model)
+		require.Equal(t, model, clampUserOpenAIModel("original", model), model)
+	}
+	for _, model := range []string{"gpt-6.1-terrain", "gpt-6.1-terra-custom"} {
+		require.Equal(t, model, clampUserOpenAIModel("terra", model))
+		require.Equal(t, model, clampUserOpenAIModel("luna", model))
 	}
 }

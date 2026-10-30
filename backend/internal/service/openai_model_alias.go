@@ -37,9 +37,9 @@ func normalizeKnownOpenAICodexModel(model string) string {
 		}
 	}
 
-	// Keep both Sol generations distinct for dispatch and exact billing.
+	// Keep Terra and both Sol generations distinct for dispatch and exact billing.
 	// Preserve upstream Sol/Luna spelling support below as well.
-	for _, model := range []string{"gpt-6.1-sol", "gpt-6-sol"} {
+	for _, model := range []string{"gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-sol"} {
 		if normalized == model {
 			return model
 		}

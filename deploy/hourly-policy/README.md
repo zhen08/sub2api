@@ -42,11 +42,12 @@ atomically while holding the controller's state-directory lock.
 
 ### Model targets and channel migration
 
-The persisted/API policy name `terra` now caps rank-above-3 text models to
-`gpt-6.1-sol`. Exact ranks are: Astra/5.6 Sol/5.6 Terra = 4; 6.1 Sol/6 Sol = 3;
-5.6 Luna = 2; 6 Luna = 1. An explicit `gpt-6-sol` remains that model, not a forced
-upgrade. `luna` still caps to `gpt-6-luna`; `original` and `full` retain their
-existing semantics. Unknown models and dedicated image/audio billing are unchanged.
+The persisted/API policy name `terra` caps higher-ranked text models to
+`gpt-6.1-terra`. Astra, legacy 5.6 Sol/Terra, 6.1 Sol and 6 Sol are above
+this cap; 5.6 Luna and 6 Luna remain below it. Explicit lower-tier requests
+are not upgraded. `luna` still caps to `gpt-6-luna`, including requests for
+6.1 Terra; `original` and `full` retain their existing semantics.
+Unknown models and dedicated image/audio billing are unchanged.
 Restricted text charges use the actual dispatched model and exact same-model
 pricing (including known spelling/effort/date/compact aliases), never another
 Sol generation, tier, wildcard, or generic fallback when its price is absent.
@@ -212,3 +213,16 @@ Luna requires 12 consecutive complete zero-token hours across all OpenAI keys,
 including cache tokens. Valid prior windows are retained; positive usage or missing
 hours breaks the streak. Pending recovery intents with only eight windows are rejected
 under the 12-hour setting. Terra recovery, if enabled later, remains eight hours.
+
+### Restoring the 20M Terra tier
+
+After the gateway carrying the Terra 6.1 cap has been deployed and verified,
+atomically set the remote state-directory config under the controller lock to
+`{"luna_enabled": true, "terra_enabled": true, "luna_recovery_hours": 12}`.
+This is an activation target, not a claim about live configuration. Do not enable
+it against the previous gateway, whose `terra` label still caps to Sol 6.1.
+The controller code and thresholds need no change: strictly >20M selects Terra,
+strictly >50M selects Luna, and all OpenAI keys/cache tokens are included.
+Terra retains eight zero-use hours; Luna retains twelve. Preserve state and
+pending journals; do not backfill processed hours or reset managed policies.
+Verify dry-run, apply, post-apply dry-run and scheduler state separately.

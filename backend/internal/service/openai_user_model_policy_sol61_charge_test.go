@@ -9,10 +9,10 @@ import (
 
 // Feed real HTTP/WS final-dispatch results into the actual deduction path, with
 // adversarial billing-source overrides and other-tier prices still available.
-func assertSol61DispatchCharge(t *testing.T, dispatched *OpenAIForwardResult) {
+func assertTerra61DispatchCharge(t *testing.T, dispatched *OpenAIForwardResult) {
 	t.Helper()
-	require.Equal(t, "gpt-6.1-sol", dispatched.UpstreamModel)
-	require.Equal(t, "gpt-6.1-sol", dispatched.UserPolicyBillingModel)
+	require.Equal(t, "gpt-6.1-terra", dispatched.UpstreamModel)
+	require.Equal(t, "gpt-6.1-terra", dispatched.UserPolicyBillingModel)
 	for _, pricingSource := range []string{"catalog", "native", "unavailable"} {
 		for _, unified := range []bool{false, true} {
 			for _, source := range []string{BillingModelSourceRequested, BillingModelSourceChannelMapped, BillingModelSourceUpstream, BillingModelSourceResponse} {
@@ -20,17 +20,17 @@ func assertSol61DispatchCharge(t *testing.T, dispatched *OpenAIForwardResult) {
 				userRepo := &openAIRecordUsageUserRepoStub{}
 				svc := newOpenAIRecordUsageServiceForTest(usageRepo, userRepo, &openAIRecordUsageSubRepoStub{}, nil)
 				prices := map[string]*LiteLLMModelPricing{}
-				for _, other := range []string{"gpt-6-sol", "gpt-5.6-sol", "gpt-6-astra", "gpt-6-luna", "gpt-6", "gpt-6.1", "gpt-5.4"} {
+				for _, other := range []string{"gpt-6.1-sol", "gpt-6-sol", "gpt-5.6-sol", "gpt-6-astra", "gpt-6-luna", "gpt-6", "gpt-6.1", "gpt-5.4"} {
 					prices[other] = &LiteLLMModelPricing{InputCostPerToken: 9e-6, OutputCostPerToken: 9e-6}
 				}
 				if pricingSource == "catalog" {
-					prices["gpt-6.1-sol"] = &LiteLLMModelPricing{InputCostPerToken: 2e-6, OutputCostPerToken: 2e-6}
+					prices["gpt-6.1-terra"] = &LiteLLMModelPricing{InputCostPerToken: 2e-6, OutputCostPerToken: 2e-6}
 				}
 				svc.billingService = NewBillingService(svc.cfg, &PricingService{pricingData: prices})
 				if pricingSource == "unavailable" {
-					// v0.2.11 supplies an exact built-in Sol 6.1 price. Remove it
+					// The catalog supplies an exact built-in Terra 6.1 price. Remove it
 					// only when exercising genuinely unavailable pricing.
-					delete(svc.billingService.fallbackPrices, "gpt-6.1-sol")
+					delete(svc.billingService.fallbackPrices, "gpt-6.1-terra")
 				}
 				key := &APIKey{ID: 10}
 				if unified {
@@ -49,7 +49,7 @@ func assertSol61DispatchCharge(t *testing.T, dispatched *OpenAIForwardResult) {
 				case "catalog":
 					expected = 30 * 2e-6 * 1.1
 				case "native":
-					expected = (20*2e-6 + 10*10e-6) * 1.1
+					expected = (20*1e-6 + 10*5e-6) * 1.1
 				case "unavailable":
 					require.Zero(t, userRepo.deductCalls)
 				}
