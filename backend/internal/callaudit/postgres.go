@@ -102,7 +102,7 @@ func (s *PostgreSQLStore) ensureSchemaAndPartitions(ctx context.Context, referen
 			return fmt.Errorf("create audit schema: %w", err)
 		}
 	}
-	for _, month := range []time.Time{reference.UTC(), reference.UTC().AddDate(0, 1, 0)} {
+	for _, month := range auditPartitionMonths(reference) {
 		if err := ensureMonthlyPartition(ctx, tx, month); err != nil {
 			return err
 		}
@@ -113,8 +113,13 @@ func (s *PostgreSQLStore) ensureSchemaAndPartitions(ctx context.Context, referen
 	return nil
 }
 
-func ensureMonthlyPartition(ctx context.Context, tx *sql.Tx, reference time.Time) error {
-	start := time.Date(reference.Year(), reference.Month(), 1, 0, 0, 0, 0, time.UTC)
+func auditPartitionMonths(reference time.Time) [2]time.Time {
+	utc := reference.UTC()
+	start := time.Date(utc.Year(), utc.Month(), 1, 0, 0, 0, 0, time.UTC)
+	return [2]time.Time{start, start.AddDate(0, 1, 0)}
+}
+
+func ensureMonthlyPartition(ctx context.Context, tx *sql.Tx, start time.Time) error {
 	end := start.AddDate(0, 1, 0)
 	partition := auditPartitionName(start)
 	statements := []string{
@@ -168,7 +173,7 @@ func auditReadinessRequirements(reference time.Time) readinessRequirements {
 		{name: "audit_artifacts_request_id_id_idx", table: "audit_artifacts"},
 		{name: "audit_artifacts_request_kind_sequence_uidx", table: "audit_artifacts", unique: true},
 	}
-	for _, month := range []time.Time{reference.UTC(), reference.UTC().AddDate(0, 1, 0)} {
+	for _, month := range auditPartitionMonths(reference) {
 		partition := auditPartitionName(month)
 		partitions = append(partitions, partition)
 		indexes = append(indexes,

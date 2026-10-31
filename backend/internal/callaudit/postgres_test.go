@@ -1,6 +1,7 @@
 package callaudit
 
 import (
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -57,6 +58,31 @@ func TestAuditReadinessRequirementsCoverCrossYearPartitionsAndIndexes(t *testing
 	}
 	if len(wantIndexes) != 0 {
 		t.Fatalf("readiness requirements missing indexes: %#v", wantIndexes)
+	}
+}
+
+func TestAuditReadinessAtMonthEnd(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		reference string
+		current   string
+		next      string
+	}{
+		{"2026-10-31T00:00:00Z", "audit_calls_2026_10", "audit_calls_2026_11"},
+		{"2026-01-31T23:59:59Z", "audit_calls_2026_01", "audit_calls_2026_02"},
+		{"2024-01-30T23:59:59Z", "audit_calls_2024_01", "audit_calls_2024_02"},
+		{"2026-01-01T07:59:59+08:00", "audit_calls_2025_12", "audit_calls_2026_01"},
+	} {
+		t.Run(tc.reference, func(t *testing.T) {
+			reference, err := time.Parse(time.RFC3339, tc.reference)
+			if err != nil {
+				t.Fatal(err)
+			}
+			got := auditReadinessRequirements(reference).partitions
+			if want := []string{tc.current, tc.next}; !slices.Equal(got, want) {
+				t.Fatalf("partitions = %v, want %v", got, want)
+			}
+		})
 	}
 }
 

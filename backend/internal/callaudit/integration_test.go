@@ -213,9 +213,9 @@ func TestDurableProcessorPostgreSQLMinIOIntegration(t *testing.T) {
 			storedAPIKeyID, storedAPIKeyName, storedUserID, storedUsername, storedAccountID, storedAccountType)
 	}
 
-	// Write across a year/month boundary to prove partition maintenance is not
-	// tied to process startup or the current wall-clock month.
-	boundaryCreatedAt := time.Date(now.Year()+1, time.January, 1, 0, 0, 1, 0, time.UTC)
+	// Maintenance on January 31 must prepare February for the writer.
+	maintenanceTime := time.Date(now.Year()+1, time.January, 31, 23, 59, 59, 0, time.UTC)
+	boundaryCreatedAt := maintenanceTime.Add(time.Second)
 	boundaryManifest := manifest
 	boundaryManifest.RequestID = boundaryRequestID
 	boundaryManifest.CreatedAt = boundaryCreatedAt
@@ -224,13 +224,13 @@ func TestDurableProcessorPostgreSQLMinIOIntegration(t *testing.T) {
 	boundaryManifest.Artifacts = nil
 	// Partition DDL belongs to the dedicated migration command, never the
 	// writer. Repeating it proves the --partitions-only operation is idempotent.
-	if err := migrationStore.EnsurePartitions(ctx, boundaryCreatedAt); err != nil {
+	if err := migrationStore.EnsurePartitions(ctx, maintenanceTime); err != nil {
 		t.Fatalf("ensure cross-month partitions: %v", err)
 	}
-	if err := migrationStore.EnsurePartitions(ctx, boundaryCreatedAt); err != nil {
+	if err := migrationStore.EnsurePartitions(ctx, maintenanceTime); err != nil {
 		t.Fatalf("repeat cross-month partition ensure: %v", err)
 	}
-	if err := store.CheckReadiness(ctx, boundaryCreatedAt); err != nil {
+	if err := store.CheckReadiness(ctx, maintenanceTime); err != nil {
 		t.Fatalf("cross-month readiness: %v", err)
 	}
 	if err := processor.Process(ctx, boundaryManifest); err != nil {
