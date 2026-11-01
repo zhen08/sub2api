@@ -228,10 +228,13 @@ def main():
                     remote = json.loads(result.stdout)
                 except (ValueError, UnicodeError, RecursionError):
                     remote = None
-                # Emit only this local static literal, never arbitrary remote data.
-                if (isinstance(remote, dict) and remote.get('status') == 'error'
-                        and remote.get('error') == 'source channel configuration drift'):
-                    failure['remote_error'] = 'source channel configuration drift'
+                # Emit only local static literals, never arbitrary remote data.
+                if isinstance(remote, dict) and remote.get('status') == 'error':
+                    for safe_error in ('source channel configuration drift',
+                                       'source group configuration drift'):
+                        if remote.get('error') == safe_error:
+                            failure['remote_error'] = safe_error
+                            break
             failures.append(failure)
             if result.returncode != 255 or failure['ssh_error'] not in (
                     'timeout', 'refused', 'network_unreachable', 'connection_closed'):

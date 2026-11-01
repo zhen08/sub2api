@@ -353,6 +353,10 @@ class PolicyBackend:
 def inventory(api):
     groups = {g['id']:g for g in pages(api.get, '/groups')}
     for gid, name in ((6,'openai-default'),(8,'openai-max-terra')):
+        # Legacy Terra group is not required for user-level model policies.
+        # Present groups, channels and key group bindings remain strict.
+        if gid == 8 and gid not in groups:
+            continue
         g = groups.get(gid, {})
         if (g.get('platform'),g.get('name'),g.get('status')) != ('openai',name,'active'):
             raise PolicyError('source group configuration drift')
