@@ -41,11 +41,11 @@ groups:
         expr: >-
           (sub2api_call_audit_backlog{job="node",instance="basic-services"} > 0)
           and (sub2api_call_audit_oldest_pending_seconds{job="node",instance="basic-services"} >= 300)
-        for: 5m
+        for: 60m
         labels: { severity: warning }
         annotations:
           summary: "Sub2API audit processing backlog is stalled"
-          description: "Pending audit work has been at least 5 minutes old for 5 minutes. Check worker progress and storage availability."
+          description: "Pending audit work has been at least 5 minutes old for 60 minutes. Check worker progress and storage availability."
       - alert: Sub2APICallAuditCollectorUnavailable
         expr: >-
           absent(sub2api_call_audit_collector_success{job="node",instance="basic-services"})

@@ -29,7 +29,7 @@
 | `Sub2APICallAuditRetryExhausted` | 耗尽或永久失败数 > 0 | 1 分钟 | critical |
 | `Sub2APICallAuditDeadLetterTooOld` | 最老未解决死信年龄 ≥ 3600 秒 | 1 分钟 | critical |
 | `Sub2APICallAuditCaptureFailures` | 10 分钟窗口内 capture failures 增长 | 无额外等待 | critical |
-| `Sub2APICallAuditBacklogTooOld` | backlog > 0 且最老待处理 ≥ 300 秒 | 5 分钟 | warning |
+| `Sub2APICallAuditBacklogTooOld` | backlog > 0 且最老待处理 ≥ 300 秒 | 60 分钟 | warning |
 | `Sub2APICallAuditCollectorUnavailable` | 采集失败、指标缺失或成功时间超过 180 秒 | 2 分钟 | critical |
 | `Sub2APICallAuditRecoveryMetricsMissing` | 启用审计但仅有旧恢复 schema | 5 分钟 | warning |
 | `Sub2APICallAuditNotReady` | 审计禁用或未就绪，且无死信/恢复中条目 | 5 分钟 | warning |

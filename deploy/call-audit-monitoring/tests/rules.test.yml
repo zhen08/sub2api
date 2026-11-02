@@ -289,28 +289,28 @@ tests:
         instance: basic-services
         severity: critical
       exp_annotations: *id002
-- name: old pending backlog requires five minutes
+- name: old pending backlog requires sixty minutes
   interval: 1m
   input_series:
   - series: sub2api_call_audit_collector_success{job="node",instance="basic-services"}
-    values: 1+0x20
+    values: 1+0x70
   - series: sub2api_call_audit_collector_last_success_unixtime{job="node",instance="basic-services"}
-    values: 0+60x20
+    values: 0+60x70
   - series: sub2api_call_audit_backlog{job="node",instance="basic-services"}
-    values: 2+0x20
+    values: 2+0x70
   - series: sub2api_call_audit_oldest_pending_seconds{job="node",instance="basic-services"}
-    values: 300+0x20
+    values: 300+0x70
   promql_expr_test:
   - expr: count(ALERTS{alertname="Sub2APICallAuditBacklogTooOld",alertstate="firing",job="node",instance="basic-services",severity="warning"})
-    eval_time: 4m
+    eval_time: 59m
     exp_samples: []
   - expr: count(ALERTS{alertname="Sub2APICallAuditBacklogTooOld",alertstate="firing",job="node",instance="basic-services",severity="warning"})
-    eval_time: 5m
+    eval_time: 60m
     exp_samples:
     - labels: '{}'
       value: 1
   alert_rule_test:
-  - eval_time: 5m
+  - eval_time: 60m
     alertname: Sub2APICallAuditBacklogTooOld
     exp_alerts:
     - exp_labels:
@@ -319,7 +319,7 @@ tests:
         severity: warning
       exp_annotations:
         summary: Sub2API audit processing backlog is stalled
-        description: Pending audit work has been at least 5 minutes old for 5 minutes. Check worker progress and storage availability.
+        description: Pending audit work has been at least 5 minutes old for 60 minutes. Check worker progress and storage availability.
 - name: old age with empty backlog does not alert
   interval: 1m
   input_series:
