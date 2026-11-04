@@ -226,3 +226,7 @@ strictly >50M selects Luna, and all OpenAI keys/cache tokens are included.
 Terra retains eight zero-use hours; Luna retains twelve. Preserve state and
 pending journals; do not backfill processed hours or reset managed policies.
 Verify dry-run, apply, post-apply dry-run and scheduler state separately.
+
+### Half-hour Terra rule
+
+`terra_half_hour: true` replaces the >20M hourly Terra trigger with strictly >10M in the preceding complete aligned 30-minute window. Cron runs at :05 and :35 to allow logging delay. Luna remains >50M per complete hour. Hourly recovery counters remain separate (Terra 8, Luna configured 12 hours); repeated half-hour ticks do not double-count zero-use hours. Half-slot journals and rollover guards reject stale partial runs.
