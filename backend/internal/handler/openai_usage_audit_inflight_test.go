@@ -2,12 +2,16 @@ package handler
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
 	"github.com/Wei-Shaw/sub2api/internal/callaudit"
 	"github.com/Wei-Shaw/sub2api/internal/config"
+	"github.com/Wei-Shaw/sub2api/internal/pkg/ctxkey"
 	"github.com/Wei-Shaw/sub2api/internal/service"
+	"github.com/gin-gonic/gin"
 	"github.com/stretchr/testify/require"
 )
 
@@ -62,4 +66,36 @@ func TestUsageTaskCompletesAuditAndInflightReservation(t *testing.T) {
 			require.True(t, session.WaitPendingUsage(cancelled), "audit has no stranded billing work")
 		})
 	}
+}
+
+func TestUsageTaskKeepsAuditSessionAfterGinContextReuse(t *testing.T) {
+	spool, err := callaudit.NewSpool(t.TempDir(), 1024)
+	require.NoError(t, err)
+	scope, err := callaudit.NewScope(callaudit.ScopeInput{RequestID: "original-request"}, 1, time.Now())
+	require.NoError(t, err)
+	session, err := callaudit.NewSession(scope, spool, time.Second)
+	require.NoError(t, err)
+
+	c, engine := gin.CreateTestContext(httptest.NewRecorder())
+	engine.ContextWithFallback = true
+	parent := context.WithValue(context.Background(), ctxkey.RequestID, "original-request")
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil).WithContext(callaudit.WithSession(parent, session))
+	task, abandon := wrapUsageRecordTaskContext(c, func(ctx context.Context) {
+		captured, ok := callaudit.SessionFromContext(ctx)
+		require.True(t, ok)
+		require.Same(t, session, captured)
+		require.Equal(t, "original-request", ctx.Value(ctxkey.RequestID))
+	})
+	defer abandon()
+
+	// The queued task must retain the original audit session even when Gin
+	// recycles its context for a request that has no audit session.
+	c.Request = httptest.NewRequest(http.MethodPost, "/v1/responses", nil).WithContext(
+		context.WithValue(context.Background(), ctxkey.RequestID, "next-request"),
+	)
+	cancelled, cancel := context.WithCancel(context.Background())
+	cancel()
+	require.False(t, session.WaitPendingUsage(cancelled))
+	task(context.Background())
+	require.True(t, session.WaitPendingUsage(cancelled))
 }
