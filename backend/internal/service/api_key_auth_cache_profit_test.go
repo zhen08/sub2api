@@ -54,11 +54,12 @@ func TestAPIKeyAuthSnapshotProfitControlRoundtrip(t *testing.T) {
 	apiKey.Group.ModelAllowlist = GroupModelAllowlist{Enabled: true, Models: []string{"gpt-5.4"}}
 	apiKey.Group.ImageCountBilling = true
 	apiKey.Group.RequirePrivacySet = true
+	apiKey.Group.ForceOpenAIUltrafast = true
 
 	snapshot := svc.snapshotFromAPIKey(context.Background(), apiKey)
 	require.NotNil(t, snapshot)
 	require.Equal(t, apiKeyAuthSnapshotVersion, snapshot.Version)
-	require.Equal(t, 28, snapshot.Version, "v28 combines local authorization with upstream RPM and privacy fields")
+	require.Equal(t, 29, snapshot.Version, "v29 combines local authorization with the upstream Ultra Fast field")
 
 	// 模拟 L2 缓存的完整 JSON 往返（与 apiKeyCache.SetAuthCache/GetAuthCache 同构）。
 	payload, err := json.Marshal(&APIKeyAuthCacheEntry{Snapshot: snapshot})
@@ -74,6 +75,7 @@ func TestAPIKeyAuthSnapshotProfitControlRoundtrip(t *testing.T) {
 	require.Equal(t, apiKey.Group.ModelAllowlist, materialized.Group.ModelAllowlist)
 	require.True(t, materialized.Group.ImageCountBilling)
 	require.True(t, materialized.Group.RequirePrivacySet)
+	require.True(t, materialized.Group.ForceOpenAIUltrafast)
 	require.True(t, materialized.User.RestrictPublicGroups)
 	require.True(t, materialized.Group.Hydrated)
 	require.True(t, materialized.Group.ProfitControlEnabled)
@@ -90,9 +92,9 @@ func TestAPIKeyAuthSnapshotProfitControlRoundtrip(t *testing.T) {
 }
 
 // Reject older local and upstream schemas that lack merged authorization,
-// billing, RPM override, or privacy fields.
+// billing, RPM override, privacy, or Ultra Fast fields.
 func TestAPIKeyAuthSnapshotOldVersionEvicted(t *testing.T) {
-	for _, version := range []int{21, 22, 23, 24, 25, 26, 27} {
+	for _, version := range []int{21, 22, 23, 24, 25, 26, 27, 28} {
 		svc := &APIKeyService{}
 		snapshot := svc.snapshotFromAPIKey(context.Background(), profitAuthTestAPIKey())
 		require.NotNil(t, snapshot)

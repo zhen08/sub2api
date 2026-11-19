@@ -37,6 +37,10 @@ func normalizeKnownOpenAICodexModel(model string) string {
 		}
 	}
 
+	if base := openai.GPT62ModelID(normalized); base != "" {
+		return base
+	}
+
 	// Keep Terra and both Sol generations distinct for dispatch and exact billing.
 	// Preserve upstream Sol/Luna spelling support below as well.
 	for _, model := range []string{"gpt-6.1-terra", "gpt-6.1-sol", "gpt-6-sol"} {
@@ -179,5 +183,5 @@ func firstUsageBillingModel(candidates []string) string {
 }
 
 func isOpenAIGPT6Model(model string) bool {
-	return openai.IsGPT61TerraModelSpelling(model) || isOpenAIGPT6AstraModel(model) || openai.IsGPT6SolOrLunaModelSpelling(model) || openai.IsGPT61SolModelSpelling(model)
+	return openai.GPT62ModelID(model) != "" || openai.IsGPT61TerraModelSpelling(model) || isOpenAIGPT6AstraModel(model) || openai.IsGPT6SolOrLunaModelSpelling(model) || openai.IsGPT61SolModelSpelling(model)
 }
