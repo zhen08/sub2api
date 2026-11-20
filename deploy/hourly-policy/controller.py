@@ -67,7 +67,7 @@ def decide(state, hour, tokens, luna_enabled=True, terra_enabled=True, luna_reco
         level = 'luna'
     elif terra_enabled and not terra_half_hour and tokens > 20_000_000:
         level = 'luna' if level == 'luna' else 'terra'
-    elif level in ('terra', 'luna') and tokens == 0 and hour >= state.get('recovery_from_hour', 0):
+    elif level in ('sol', 'terra', 'luna') and tokens == 0 and hour >= state.get('recovery_from_hour', 0):
         # Legacy low counts may include nonzero usage: evidence, not the
         # counter, is authoritative. Never synthesize missing evidence.
         required = luna_recovery_hours if level == 'luna' else 8
@@ -87,16 +87,27 @@ def decide(state, hour, tokens, luna_enabled=True, terra_enabled=True, luna_reco
     return result
 
 
-def plan(users, hour, totals, keys, policies, luna_enabled=True, terra_enabled=True, luna_recovery_hours=8, terra_half_hour=False, half_slot=None, half_totals=None):
+def valid_quarter_slot(hour, slot):
+    return type(slot) is int and 4 * hour + 3 <= slot <= 4 * hour + 6
+
+
+def plan(users, hour, totals, keys, policies, luna_enabled=True, terra_enabled=True,
+         luna_recovery_hours=8, terra_half_hour=False, half_slot=None, half_totals=None,
+         quarter_slot=None, quarter_totals=None):
     import copy
     users = copy.deepcopy(users)
     if terra_half_hour and (type(half_slot) is not int or half_slot not in (2*hour+1, 2*hour+2) or half_totals is None):
         raise PolicyError('invalid half-hour snapshot slot')
+    if quarter_totals is not None and not valid_quarter_slot(hour, quarter_slot):
+        raise PolicyError('invalid quarter-hour snapshot slot')
     by_user = {}
     for key in keys:
         by_user.setdefault(str(key['user_id']), []).append(key)
     ops, transitions = [], []
-    for uid in sorted(set(by_user) | set(users) | {str(uid) for uid in (half_totals or {}) if uid in policies} | {str(uid) for uid in totals if uid in policies} | {str(uid) for uid,level in policies.items() if level != 'original'}, key=int):
+    usage_users = set(totals) | (half_totals or {}).keys() | (quarter_totals or {}).keys()
+    candidates = set(by_user) | set(users) | {str(uid) for uid in usage_users if uid in policies}
+    candidates.update(str(uid) for uid, level in policies.items() if level != 'original')
+    for uid in sorted(candidates, key=int):
         user_keys = by_user.get(uid, [])
         old = users.get(uid, {})
         current = policies.get(int(uid))
@@ -113,6 +124,16 @@ def plan(users, hour, totals, keys, policies, luna_enabled=True, terra_enabled=T
                 half_escalated = True
         terra_relaxing = not terra_enabled and old.get('level') == 'terra' and nxt['level'] == 'full'
         relaxing = not luna_enabled and old.get('level') == 'luna' and nxt['level'] in ('terra', 'full')
+        quarter_tokens = 0
+        quarter_limited = False
+        if quarter_totals is not None and quarter_slot > old.get('last_quarter_slot', -1):
+            nxt['last_quarter_slot'] = quarter_slot
+            quarter_tokens = quarter_totals.get(int(uid), 0)
+            if quarter_tokens > 5_000_000 and not (terra_relaxing or relaxing) and nxt['level'] in ('original', 'full', 'sol'):
+                # Keep a stronger cap if current quarter usage interrupts recovery.
+                level = current if current in ('terra', 'luna') else 'sol'
+                nxt.update(level=level, low=0, low_windows=[], recovery_from_hour=quarter_slot // 4 + 1)
+                quarter_limited = True
         if not relaxing and nxt['level'] in ('terra','luna') and nxt['level'] != old.get('level','original'):
             if not half_escalated:
                 nxt['recovery_from_hour'] = hour + 1
@@ -121,6 +142,7 @@ def plan(users, hour, totals, keys, policies, luna_enabled=True, terra_enabled=T
         if level != current:
             tokens = totals.get(int(uid), 0)
             reason = ('half_hour_tokens_gt_10000000' if half_escalated else
+                      'quarter_hour_tokens_gt_5000000' if quarter_limited else
                       'automatic_terra_suspended' if terra_relaxing else
                       'automatic_luna_suspended' if relaxing else
                       'tokens_gt_50000000' if luna_enabled and tokens > 50_000_000 else
@@ -133,9 +155,14 @@ def plan(users, hour, totals, keys, policies, luna_enabled=True, terra_enabled=T
             if half_escalated:
                 transitions[-1].update(half_slot=half_slot, half_hour_tokens=half_totals.get(int(uid),0),
                     window_start=half_slot*1800, window_end=(half_slot+1)*1800)
+            if quarter_limited:
+                transitions[-1].update(quarter_slot=quarter_slot, quarter_hour_tokens=quarter_tokens,
+                    window_start=quarter_slot*900, window_end=(quarter_slot+1)*900)
             ops.append({'id':int(uid), 'from':current, 'to':level})
     result = {'users':users, 'ops':ops, 'transitions':transitions, 'hour':hour}
     if terra_half_hour: result['half_slot'] = half_slot
+    if quarter_totals is not None:
+        result['quarter_slot'] = quarter_slot
     return result
 
 
@@ -199,7 +226,7 @@ def commit_plan(store, planned, read_policy, update_policy, guard=lambda: None, 
             hour = planned['hour']
             user = planned['users'].get(str(op['id']), {})
             evidence = user.get('low_windows')
-            if (op['from'] not in ('terra', 'luna')
+            if (op['from'] not in ('sol', 'terra', 'luna')
                     or user.get('level') != 'full' or user.get('last') != hour
                     or hour - (required - 1) < user.get('recovery_from_hour', 0)
                     or not isinstance(evidence, list) or len(evidence) != required
@@ -231,7 +258,7 @@ def commit_plan(store, planned, read_policy, update_policy, guard=lambda: None, 
 
 
 def usage_sql(hour, window_seconds=3600):
-    if type(hour) is not int or hour < 0 or type(window_seconds) is not int or window_seconds not in (1800,3600):
+    if type(hour) is not int or hour < 0 or type(window_seconds) is not int or window_seconds not in (900, 1800, 3600):
         raise PolicyError('invalid hour')
     return f"""BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY;
 WITH w AS MATERIALIZED (
@@ -355,12 +382,12 @@ class PolicyBackend:
     def read(self, uid):
         data = self.api.get(f'/users/{int(uid)}/openai-model-policy')
         level = data.get('level')
-        if level not in ('original','terra','luna','full'):
+        if level not in ('original', 'sol', 'terra', 'luna', 'full'):
             raise PolicyError('invalid user policy response')
         return level
 
     def write(self, uid, level):
-        if level not in ('terra','luna','full'):
+        if level not in ('sol', 'terra', 'luna', 'full'):
             raise PolicyError('invalid policy write')
         self.api.put(f'/users/{int(uid)}/openai-model-policy', {'level':level})
 
@@ -410,7 +437,10 @@ def inventory(api):
     return {'users':safe_users,'keys':keys,'user_count':len(users),'all_key_count':key_count,'openai_key_count':len(keys)}
 
 
-def run(api, store, hour, collector=collect_usage, apply=False, collect_only=False, guard=lambda: None, luna_enabled=True, terra_enabled=True, luna_recovery_hours=8, terra_half_hour=False, half_slot=None, half_collector=None):
+def run(api, store, hour, collector=collect_usage, apply=False, collect_only=False,
+        guard=lambda: None, luna_enabled=True, terra_enabled=True, luna_recovery_hours=8,
+        terra_half_hour=False, half_slot=None, half_collector=None,
+        sol_quarter_hour=False, quarter_slot=None, quarter_collector=None):
     guard()
     inv = inventory(api)
     usage = collector(hour)
@@ -421,6 +451,12 @@ def run(api, store, hour, collector=collect_usage, apply=False, collect_only=Fal
             raise PolicyError('invalid half-hour snapshot slot')
         half_usage = (half_collector or (lambda slot: collect_usage(slot,1800)))(half_slot)
         half_totals = validate_usage(half_usage,half_slot)
+    quarter_totals = None
+    if sol_quarter_hour:
+        if not valid_quarter_slot(hour, quarter_slot):
+            raise PolicyError('invalid quarter-hour snapshot slot')
+        quarter_usage = (quarter_collector or (lambda slot: collect_usage(slot, 900)))(quarter_slot)
+        quarter_totals = validate_usage(quarter_usage, quarter_slot)
     data = store.load()
     identities = {u['id']:u for u in inv['users']}
     if any(int(uid) not in identities for uid in data['users']):
@@ -433,6 +469,9 @@ def run(api, store, hour, collector=collect_usage, apply=False, collect_only=Fal
     if terra_half_hour:
         summary.update(half_slot=half_slot, half_usage=half_usage,
                        half_window_start=half_slot*1800, half_window_end=(half_slot+1)*1800)
+    if sol_quarter_hour:
+        summary.update(quarter_slot=quarter_slot, quarter_usage=quarter_usage,
+                       quarter_window_start=quarter_slot*900, quarter_window_end=(quarter_slot+1)*900)
     if collect_only:
         summary['status'] = 'collected_only_backend_not_checked'
         summary['bootstrap_candidates'] = [dict(identities[uid], keys=[k for k in inv['keys'] if k['user_id']==uid])
@@ -444,6 +483,10 @@ def run(api, store, hour, collector=collect_usage, apply=False, collect_only=Fal
     pending = data.get('pending')
     resumed_ops, resumed_transitions = [], []
     if pending:
+        if sol_quarter_hour and pending.get('quarter_slot') != quarter_slot:
+            raise PolicyError('stale quarter-hour pending intent: no writes')
+        if not sol_quarter_hour and 'quarter_slot' in pending:
+            raise PolicyError('quarter-hour policy disabled: pending intent requires reconciliation; no writes')
         if terra_half_hour and pending.get('half_slot') != half_slot:
             raise PolicyError('stale half-hour pending intent: no writes')
         if not terra_enabled and any(op['to'] == 'terra' for op in pending['ops']):
@@ -460,7 +503,8 @@ def run(api, store, hour, collector=collect_usage, apply=False, collect_only=Fal
         policies = {uid:backend.read(uid) for uid in identities}
         data = store.load()
     planned = plan(data['users'],hour,totals,inv['keys'],policies,luna_enabled=luna_enabled,terra_enabled=terra_enabled,luna_recovery_hours=luna_recovery_hours,
-                   terra_half_hour=terra_half_hour,half_slot=half_slot,half_totals=half_totals)
+                   terra_half_hour=terra_half_hour,half_slot=half_slot,half_totals=half_totals,
+                   quarter_slot=quarter_slot, quarter_totals=quarter_totals)
     summary['targets'] = [dict(op,user_id=op['id'],username=identities[op['id']]['username'],
                               email=identities[op['id']]['email'],keys=[k for k in inv['keys'] if k['user_id']==op['id']])
                           for op in resumed_ops + planned['ops']]
@@ -481,8 +525,8 @@ def load_policy_config(path):
     except (OSError, ValueError):
         raise PolicyError('invalid policy configuration') from None
     if (not isinstance(config, dict) or 'luna_enabled' not in config
-            or not set(config) <= {'luna_enabled', 'terra_enabled', 'luna_recovery_hours', 'terra_half_hour'}
-            or any(type(config[k]) is not bool for k in ('luna_enabled','terra_enabled','terra_half_hour') if k in config)
+            or not set(config) <= {'luna_enabled', 'terra_enabled', 'luna_recovery_hours', 'terra_half_hour', 'sol_quarter_hour'}
+            or any(type(config[k]) is not bool for k in ('luna_enabled', 'terra_enabled', 'terra_half_hour', 'sol_quarter_hour') if k in config)
             or ('luna_recovery_hours' in config and
                 (type(config['luna_recovery_hours']) is not int or config['luna_recovery_hours'] not in (8,12)))):
         raise PolicyError('invalid policy configuration')
@@ -505,11 +549,17 @@ def main(argv=None, api=None, collector=collect_usage):
     modes.add_argument('--apply',action='store_true')
     parser.add_argument('--state-dir',default='/var/lib/aiproxy-hourly-policy')
     parser.add_argument('--expected-hour',type=int)
+    parser.add_argument('--expected-quarter-slot', type=int)
     args = parser.parse_args(argv)
     hour = processed_hour() if args.expected_hour is None else args.expected_hour
     half_slot = int(dt.datetime.now(dt.timezone.utc).timestamp() // 1800) - 1
+    quarter_slot = args.expected_quarter_slot
+    if quarter_slot is None:
+        quarter_slot = int(dt.datetime.now(dt.timezone.utc).timestamp() // 900) - 1
     config = {}
     def guard():
+        if config.get('sol_quarter_hour') and int(dt.datetime.now(dt.timezone.utc).timestamp() // 900) - 1 != quarter_slot:
+            raise PolicyError('quarter-hour mismatch/rollover; no further writes')
         if config.get('terra_half_hour') and int(dt.datetime.now(dt.timezone.utc).timestamp() // 1800)-1 != half_slot:
             raise PolicyError('half-hour rollover; no further writes')
         if processed_hour() != hour:
@@ -521,7 +571,7 @@ def main(argv=None, api=None, collector=collect_usage):
         lock = store.lock() if args.apply else contextlib.nullcontext()
         with lock:
             config = load_policy_config(store.directory / 'config.json')
-            summary = run(api,store,hour,collector,apply=args.apply,collect_only=args.collect_only,guard=guard,half_slot=half_slot,
+            summary = run(api,store,hour,collector,apply=args.apply,collect_only=args.collect_only,guard=guard,half_slot=half_slot,quarter_slot=quarter_slot,
                           **config)
         if not args.apply:
             print(json.dumps(summary,sort_keys=True))

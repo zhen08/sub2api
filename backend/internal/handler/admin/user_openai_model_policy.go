@@ -56,8 +56,8 @@ func (h *UserHandler) PutOpenAIModelPolicy(c *gin.Context) {
 		return
 	}
 	var level string
-	if err = decoder.Decode(&level); err != nil || (level != "terra" && level != "luna" && level != "full") {
-		response.BadRequest(c, "level must be terra, luna or full")
+	if err = decoder.Decode(&level); err != nil || (level != "sol" && level != "terra" && level != "luna" && level != "full") {
+		response.BadRequest(c, "level must be sol, terra, luna or full")
 		return
 	}
 	token, err = decoder.Token()

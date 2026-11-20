@@ -9,7 +9,7 @@ import (
 const userOpenAIModelPolicyPrefix = "user_openai_model_policy:"
 
 func validUserOpenAIModelPolicy(level string) bool {
-	return level == "terra" || level == "luna" || level == "full"
+	return level == "sol" || level == "terra" || level == "luna" || level == "full"
 }
 
 // GetUserOpenAIModelPolicy deliberately reads persistence on every invocation.

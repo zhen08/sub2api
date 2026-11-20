@@ -125,3 +125,4 @@ class RetryScheduleTests(unittest.TestCase):
         self.assertEqual(json.loads(output.splitlines()[-1])['error'], 'retries_exhausted')
         self.assertNotIn('DUMMY-SECRET', output)
         self.assertTrue(all('--expected-hour 100' in c[2][-1] for c in calls))
+        self.assertTrue(all('--expected-quarter-slot 403' in c[2][-1] for c in calls))

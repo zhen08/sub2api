@@ -230,3 +230,20 @@ Verify dry-run, apply, post-apply dry-run and scheduler state separately.
 ### Half-hour Terra rule
 
 `terra_half_hour: true` replaces the >20M hourly Terra trigger with strictly >10M in the preceding complete aligned 30-minute window. Cron runs at :05 and :35 to allow logging delay. Luna remains >50M per complete hour. Hourly recovery counters remain separate (Terra 8, Luna configured 12 hours); repeated half-hour ticks do not double-count zero-use hours. Half-slot journals and rollover guards reject stale partial runs.
+
+### Quarter-hour Sol rule
+
+After deploying a gateway that accepts the `sol` policy, enable
+`"sol_quarter_hour": true` in the controller's state-directory configuration and
+schedule the wrapper at `5,20,35,50 * * * *`. Omitting the setting leaves the
+quarter-hour rule disabled. Each run queries the preceding complete aligned
+15-minute window. For example, :20 queries :00–:15. Strictly more than
+5,000,000 OpenAI tokens across a user's keys selects Sol unless a stronger
+restriction applies. The gateway caps known Astra requests to `gpt-6.2-sol`.
+
+Sol recovers to Full after eight consecutive zero-token complete hours.
+A new over-limit quarter resets Sol recovery, starting with the first full hour
+after the quarter's containing hour. Each quarter, half-hour and full hour is
+processed at most once per user. The wrapper pins the quarter across retries,
+and the controller stops writes at rollover with Sol enabled. Resolve any
+pending intent before enabling or disabling this setting.

@@ -46,7 +46,7 @@ func TestUserOpenAIModelPolicyAPI(t *testing.T) {
 		return w
 	}
 	require.JSONEq(t, `{"code":0,"message":"success","data":{"level":"original"}}`, call("GET", "1", "").Body.String())
-	for _, level := range []string{"terra", "luna", "full"} {
+	for _, level := range []string{"sol", "terra", "luna", "full"} {
 		w := call("PUT", "1", `{"level":"`+level+`"}`)
 		require.Equal(t, 200, w.Code, w.Body.String())
 		require.JSONEq(t, `{"code":0,"message":"success","data":{"level":"`+level+`"}}`, call("GET", "1", "").Body.String())

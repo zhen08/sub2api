@@ -56,6 +56,7 @@ func observeUserModelDispatch(ctx context.Context, before, after []byte, level s
 		// back to the original higher-tier request. Non-GPT billing is untouched.
 		restrictedTier := (level == "terra" || level == "luna") &&
 			(actual == "gpt-6.1-terra" || actual == "gpt-6.1-sol" || actual == "gpt-6-sol" || actual == "gpt-6-luna" || actual == "gpt-5.6-luna")
+		restrictedTier = restrictedTier || (level == "sol" && actual == "gpt-6.2-sol")
 		observation.restricted = restrictedTier
 		observation.rewritten = original != actual || restrictedTier
 		observation.mu.Unlock()

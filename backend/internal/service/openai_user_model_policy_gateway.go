@@ -80,6 +80,9 @@ func clampUserOpenAIModel(level, model string) string {
 	if rank == 0 {
 		return model
 	}
+	if level == "sol" && (canonical == "gpt-6.2-astra" || canonical == "gpt-6-astra") {
+		return "gpt-6.2-sol"
+	}
 	// "terra" remains the persisted/API label for the GPT-6.1 Terra cap.
 	if level == "terra" && rank > 3 {
 		return "gpt-6.1-terra"

@@ -155,7 +155,7 @@ def bounded_process(cmd, source, timeout, output_limit):
         proc.wait(timeout=.2)
 
 
-def command(mode, expected_hour=None):
+def command(mode, expected_hour=None, expected_quarter_slot=None):
     if mode not in ('--dry-run','--apply','--collect-only'):
         raise ValueError('unsupported mode')
     host = os.environ.get('HOURLY_POLICY_SSH_HOST', '')
@@ -164,6 +164,8 @@ def command(mode, expected_hour=None):
             or not re.fullmatch(r'[0-9]{1,5}', port) or not 1 <= int(port) <= 65535):
         raise ValueError('invalid SSH configuration')
     suffix = '' if expected_hour is None else ' --expected-hour ' + str(int(expected_hour))
+    if expected_quarter_slot is not None:
+        suffix += ' --expected-quarter-slot ' + str(int(expected_quarter_slot))
     return ['ssh','-o','BatchMode=yes','-o','ConnectTimeout=15',
             '-o','ServerAliveInterval=15','-o','ServerAliveCountMax=3',
             '-p',port,host,'sudo -n python3 - ' + mode + suffix]
@@ -182,7 +184,9 @@ def main():
     except OSError:
         print(json.dumps({'status':'error','error':'source_read_failed'}))
         return 1
-    hour = int(time.time() // 3600) - 1
+    now = time.time()
+    hour = int(now // 3600) - 1
+    quarter_slot = int(now // 900) - 1
     started = time.monotonic()
     deadline = started + 900
     failures = []
@@ -213,7 +217,7 @@ def main():
             return fail({'status':'error','error':'deadline_exhausted','hour':hour})
         try:
             # Reserve cleanup time within the 270s attempt / 900s total budgets.
-            result = bounded_process(command(mode, hour), source, min(269, remaining - 1), 1048576)
+            result = bounded_process(command(mode, hour, quarter_slot), source, min(269, remaining - 1), 1048576)
             if result.returncode == 0 and not result.stderr:
                 if result.stdout:
                     print(result.stdout.decode('utf-8'), end='')

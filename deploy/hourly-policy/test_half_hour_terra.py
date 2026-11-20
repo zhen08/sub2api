@@ -31,7 +31,7 @@ class HalfHourTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as d:
             p=Path(d)/'config.json';p.write_text('{"luna_enabled":true,"terra_half_hour":true}')
             self.assertTrue(c.load_policy_config(p)['terra_half_hour'])
-        with self.assertRaises(c.PolicyError):c.usage_sql(2,900)
+        with self.assertRaises(c.PolicyError):c.usage_sql(2,600)
 
     def test_run_lost_response_retry_and_slot_journal_guard(self):
         def doc(slot,n):
