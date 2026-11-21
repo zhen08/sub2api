@@ -73,7 +73,7 @@ func TestExtractEntryModelUsesBoundedPrefix(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	if _, err := file.WriteString(`{"metadata":{"source":"test"},"model":"claude-sonnet","stream":true,"messages":[]}`); err != nil {
 		t.Fatal(err)
 	}

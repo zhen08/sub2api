@@ -53,7 +53,7 @@ func testOpenAIUserModelPolicyExistingWebSocket(t *testing.T, requestedModel, ma
 					if err != nil {
 						return
 					}
-					defer conn.CloseNow()
+					defer func() { _ = conn.CloseNow() }()
 					for {
 						ctx, cancel := context.WithTimeout(r.Context(), 8*time.Second)
 						_, body, e := conn.Read(ctx)
@@ -105,7 +105,7 @@ func testOpenAIUserModelPolicyExistingWebSocket(t *testing.T, requestedModel, ma
 					ended <- e
 					return
 				}
-				defer conn.CloseNow()
+				defer func() { _ = conn.CloseNow() }()
 				ctx := WithOpenAIUserModelPolicy(r.Context(), 17, nil)
 				c, _ := gin.CreateTestContext(httptest.NewRecorder())
 				c.Request = r.WithContext(ctx)
@@ -123,7 +123,7 @@ func testOpenAIUserModelPolicyExistingWebSocket(t *testing.T, requestedModel, ma
 			defer cancel()
 			client, _, err := coderws.Dial(ctx, "ws"+strings.TrimPrefix(gateway.URL, "http"), nil)
 			require.NoError(t, err)
-			defer client.CloseNow()
+			defer func() { _ = client.CloseNow() }()
 			for i, level := range []string{"full", "terra", "luna", "full", "luna", "luna", "terra"} {
 				_, err = settings.SetUserOpenAIModelPolicy(ctx, 17, level)
 				require.NoError(t, err)
