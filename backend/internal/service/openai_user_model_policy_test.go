@@ -31,6 +31,22 @@ func (r *userModelPolicyRepo) GetValue(_ context.Context, key string) (string, e
 	}
 	return v, nil
 }
+
+func (r *userModelPolicyRepo) GetMultiple(_ context.Context, keys []string) (map[string]string, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.err != nil {
+		return nil, r.err
+	}
+	values := make(map[string]string, len(keys))
+	for _, key := range keys {
+		if value, ok := r.values[key]; ok {
+			values[key] = value
+		}
+	}
+	return values, nil
+}
+
 func (r *userModelPolicyRepo) Set(_ context.Context, key, value string) error {
 	r.mu.Lock()
 	defer r.mu.Unlock()
