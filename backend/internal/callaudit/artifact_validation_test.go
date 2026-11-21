@@ -268,7 +268,7 @@ func TestDurableProcessorPreservesPermanentUploadFailure(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	defer db.Close()
+	defer func() { _ = db.Close() }()
 	args := make([]driver.Value, 27)
 	for index := range args {
 		args[index] = sqlmock.AnyArg()

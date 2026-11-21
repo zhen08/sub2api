@@ -82,7 +82,7 @@ func (s *ObjectStore) Upload(ctx context.Context, manifest Manifest, artifact Ar
 	if err != nil {
 		return StoredArtifact{}, err
 	}
-	defer source.Close()
+	defer func() { _ = source.Close() }()
 	sourcePath := source.Name()
 
 	temp, err := os.CreateTemp(filepath.Dir(sourcePath), ".audit-upload-*.json.gz")
@@ -92,7 +92,7 @@ func (s *ObjectStore) Upload(ctx context.Context, manifest Manifest, artifact Ar
 	tempPath := temp.Name()
 	defer func() {
 		_ = temp.Close()
-		_ = os.Remove(tempPath)
+		_ = os.Remove(tempPath) //nolint:gosec // G703: tempPath is assigned by CreateTemp beside the validated spool artifact.
 	}()
 	if err := temp.Chmod(0o600); err != nil {
 		return StoredArtifact{}, fmt.Errorf("secure compressed audit artifact: %w", err)

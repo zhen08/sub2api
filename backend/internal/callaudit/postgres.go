@@ -270,7 +270,7 @@ func (s *PostgreSQLStore) readinessNames(ctx context.Context, query string, args
 	if err != nil {
 		return nil, err
 	}
-	defer rows.Close()
+	defer func() { _ = rows.Close() }()
 	var names []string
 	for rows.Next() {
 		var name string

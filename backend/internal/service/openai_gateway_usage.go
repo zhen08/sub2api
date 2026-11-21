@@ -321,7 +321,7 @@ func (s *OpenAIGatewayService) RecordUsage(ctx context.Context, input *OpenAIRec
 	// the Standard tier using the same channel, peak, and long-context policy.
 	// Missing restricted pricing already produced a zero-cost record and warning;
 	// do not lose that record by retrying the same unavailable price at Standard.
-	if groupBillsOpenAIFastAtStandard(apiKey, billingAccount, serviceTier) && !(policyBillingModel != "" && isUsagePricingUnavailableError(err)) {
+	if groupBillsOpenAIFastAtStandard(apiKey, billingAccount, serviceTier) && (policyBillingModel == "" || !isUsagePricingUnavailableError(err)) {
 		standardCost, standardErr := s.calculateOpenAIRecordUsageCost(
 			ctx,
 			result,

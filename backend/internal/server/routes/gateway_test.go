@@ -145,7 +145,10 @@ func TestLegacyCompletionsHandlerMapsPromptWithoutChangingResponseContract(t *te
 	require.Equal(t, float64(1), mapped["n"])
 	messages, ok := mapped["messages"].([]any)
 	require.True(t, ok)
-	require.Equal(t, "hello", messages[0].(map[string]any)["content"])
+	require.Len(t, messages, 1)
+	message, ok := messages[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "hello", message["content"])
 
 	recorder = httptest.NewRecorder()
 	request = httptest.NewRequest(http.MethodPost, "/v1/completions", strings.NewReader(`{"model":"gpt"}`))

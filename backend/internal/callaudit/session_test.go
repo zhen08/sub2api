@@ -41,7 +41,7 @@ func newTestSession(t *testing.T, usageWait time.Duration) (*Session, *Spool) {
 func TestSessionContextAndConcurrentUsageMerge(t *testing.T) {
 	t.Parallel()
 	session, _ := newTestSession(t, time.Second)
-	ctx := WithSession(nil, session)
+	ctx := WithSession(nil, session) //nolint:staticcheck // SA1012: exercise the nil-context fallback.
 	got, ok := SessionFromContext(ctx)
 	if !ok || got != session {
 		t.Fatalf("SessionFromContext() = %p, %v", got, ok)

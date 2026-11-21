@@ -419,8 +419,9 @@ func safeErrorCode(code string) string {
 		return "unknown"
 	}
 	for _, character := range code {
-		if !(character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' ||
-			character >= '0' && character <= '9' || character == '_' || character == '-') {
+		valid := character >= 'a' && character <= 'z' || character >= 'A' && character <= 'Z' ||
+			character >= '0' && character <= '9' || character == '_' || character == '-'
+		if !valid {
 			return "unknown"
 		}
 	}

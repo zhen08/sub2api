@@ -157,7 +157,7 @@ func openReplayArtifact(spool *Spool, ref ArtifactRef) (*os.File, error) {
 		if component != "" {
 			current = filepath.Join(current, component)
 		}
-		checked, err = os.Lstat(current)
+		checked, err = os.Lstat(current) //nolint:gosec // G703: replayArtifactPath confines components to the spool, and each symlink is rejected before proceeding.
 		if err != nil {
 			return nil, replayArtifactIOError(err)
 		}
@@ -183,7 +183,7 @@ func openReplayArtifact(spool *Spool, ref ArtifactRef) (*os.File, error) {
 	if err != nil {
 		return nil, replayArtifactIOError(err)
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	file, err := root.Open(relative)
 	if err != nil {
 		return nil, replayArtifactIOError(err)

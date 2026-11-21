@@ -73,12 +73,12 @@ func encodeURIComponent(value string) string {
 	for _, b := range []byte(value) {
 		if (b >= 'a' && b <= 'z') || (b >= 'A' && b <= 'Z') || (b >= '0' && b <= '9') ||
 			strings.ContainsRune("-_.!~*'()", rune(b)) {
-			builder.WriteByte(b)
+			_ = builder.WriteByte(b)
 			continue
 		}
-		builder.WriteByte('%')
-		builder.WriteByte(hexChars[b>>4])
-		builder.WriteByte(hexChars[b&0x0f])
+		_ = builder.WriteByte('%')
+		_ = builder.WriteByte(hexChars[b>>4])
+		_ = builder.WriteByte(hexChars[b&0x0f])
 	}
 	return builder.String()
 }

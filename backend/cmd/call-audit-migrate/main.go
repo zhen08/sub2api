@@ -47,7 +47,7 @@ func main() {
 	if err != nil {
 		fatal(err)
 	}
-	defer store.Close()
+	defer func() { _ = store.Close() }()
 	ctx, cancel := context.WithTimeout(context.Background(), 60*time.Second)
 	defer cancel()
 	result, err := executeCommand(ctx, store, options, time.Now())

@@ -312,7 +312,7 @@ func (s *Spool) LoadManifest(relativeOrAbsolute string) (Manifest, error) {
 	if err != nil {
 		return Manifest{}, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(file, maxManifestBytes+1))
 	if err != nil {
 		return Manifest{}, err
@@ -336,7 +336,7 @@ func (s *Spool) ReadArtifact(ref ArtifactRef) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer file.Close()
+	defer func() { _ = file.Close() }()
 	raw, err := io.ReadAll(io.LimitReader(file, s.maxArtifactBytes+1))
 	if err != nil {
 		return nil, err
@@ -391,7 +391,7 @@ func (s *Spool) removeBundle(manifest Manifest) error {
 	if err != nil {
 		return err
 	}
-	defer root.Close()
+	defer func() { _ = root.Close() }()
 	var joined error
 	for _, artifact := range manifest.Artifacts {
 		if err := root.Remove(filepath.FromSlash(artifact.SpoolPath)); err != nil && !errors.Is(err, os.ErrNotExist) {

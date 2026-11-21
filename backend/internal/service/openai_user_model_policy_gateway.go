@@ -208,8 +208,3 @@ func (s *OpenAIGatewayService) finalizeUserOpenAIHTTPRequest(request *http.Reque
 	request.GetBody = func() (io.ReadCloser, error) { return io.NopCloser(bytes.NewReader(body)), nil }
 	return body, strings.TrimSpace(gjson.GetBytes(body, "model").String()), nil
 }
-
-func (s *OpenAIGatewayService) enforceUserOpenAIHTTPRequest(request *http.Request, account *Account) error {
-	_, _, err := s.finalizeUserOpenAIHTTPRequest(request, account)
-	return err
-}
