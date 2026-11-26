@@ -8,19 +8,19 @@ from test_controller import FakeAPI
 class TerraSuspendTests(unittest.TestCase):
     def test_thresholds_and_existing_luna(self):
         self.assertIn('terra_enabled', __import__('inspect').signature(c.decide).parameters)
-        for tokens in (0, 20_000_000, 20_000_001, 50_000_000, 50_000_001, 10**18):
+        for tokens in (0, 20_000_000, 20_000_001, 60_000_000, 60_000_001, 10**18):
             self.assertEqual(c.decide({}, 100, tokens, terra_enabled=False)['level'],
-                             'luna' if tokens > 50_000_000 else 'original')
+                             'luna' if tokens > 60_000_000 else 'original')
             self.assertEqual(c.decide({'level':'luna','last':99}, 100, tokens,
                                       terra_enabled=False)['level'], 'luna')
 
     def test_managed_terra_relaxes_but_over_limit_goes_luna(self):
         self.assertIn('terra_enabled', __import__('inspect').signature(c.plan).parameters)
         for hour in (100, 101):
-            for tokens in (0, 30_000_000, 50_000_001):
+            for tokens in (0, 30_000_000, 60_000_001):
                 old={'9':{'level':'terra','last':100}}
                 p=c.plan(old,hour,{9:tokens},[],{9:'terra'},terra_enabled=False)
-                want='luna' if tokens>50_000_000 else 'full'
+                want='luna' if tokens>60_000_000 else 'full'
                 self.assertEqual(p['ops'],[{'id':9,'from':'terra','to':want}])
                 self.assertEqual(c.plan(p['users'],hour,{9:tokens},[],{9:want},terra_enabled=False)['ops'],[])
         with self.assertRaises(c.PolicyError):

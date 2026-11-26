@@ -89,12 +89,12 @@ class FixTests(unittest.TestCase):
                 raise OSError('lost response')
             api.put = lost
             with self.assertRaises(OSError):
-                c.run(api, store, 100, lambda h: doc(51000001), apply=True)
+                c.run(api, store, 100, lambda h: doc(61000001), apply=True)
             transition = store.load()['pending']['transitions'][0]
-            self.assertEqual(transition.get('hourly_tokens'), 51000001, 'intent lacks original tokens')
+            self.assertEqual(transition.get('hourly_tokens'), 61000001, 'intent lacks original tokens')
             self.assertEqual(transition['hour_start'], '1970-01-05T04:00:00+00:00')
             self.assertEqual(transition['hour_end'], '1970-01-05T05:00:00+00:00')
-            self.assertEqual(transition['reason'], 'tokens_gt_50000000')
+            self.assertEqual(transition['reason'], 'tokens_gt_60000000')
             api.put = put; out = io.StringIO()
             with patch.object(c, 'processed_hour', return_value=100), contextlib.redirect_stdout(out):
                 self.assertEqual(c.main(['--apply','--expected-hour','100','--state-dir',directory], api=api, collector=lambda h:doc(0)), 0)

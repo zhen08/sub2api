@@ -11,11 +11,11 @@ class PolicyTests(unittest.TestCase):
         self.addCleanup(env.stop)
 
     def test_thresholds(self):
-        for n,want in [(0,'original'),(20_000_000,'original'),(20_000_001,'terra'),(50_000_000,'terra'),(50_000_001,'luna')]:
+        for n,want in [(0,'original'),(20_000_000,'original'),(20_000_001,'terra'),(60_000_000,'terra'),(60_000_001,'luna')]:
             self.assertEqual(c.decide({},100,n)['level'],want)
 
     def test_sticky_recovery_repeat_gap_and_bootstrap(self):
-        s=c.decide({},100,50_000_001)
+        s=c.decide({},100,60_000_001)
         self.assertEqual(c.decide(s,101,30_000_000)['level'],'luna')
         low=c.decide(s,101,0)
         self.assertEqual(low['level'],'luna')
@@ -50,7 +50,7 @@ class PolicyTests(unittest.TestCase):
         for hour in range(101, 108):
             p2=c.plan(p2['users'],hour,{9:0},keys,{9:'terra'})
         self.assertEqual(p2['ops'],[{'id':9,'from':'terra','to':'full'}])
-        p3=c.plan(p2['users'],108,{9:51_000_000},keys,{9:'full'})
+        p3=c.plan(p2['users'],108,{9:61_000_000},keys,{9:'full'})
         self.assertEqual(p3['ops'],[{'id':9,'from':'full','to':'luna'}])
         p4=c.plan(p3['users'],108,{9:0},keys+[{'id':3,'user_id':9,'group_id':6}],{9:'luna'})
         self.assertEqual(p4['users'],p3['users'])
@@ -180,7 +180,7 @@ class PolicyTests(unittest.TestCase):
             self.assertEqual(api.level,'terra')
 
     def test_high_usage_without_current_keys_and_any_openai_group(self):
-        p=c.plan({},100,{9:51_000_000},[],{9:'original'})
+        p=c.plan({},100,{9:61_000_000},[],{9:'original'})
         self.assertEqual(p['ops'],[{'id':9,'from':'original','to':'luna'}])
         self.assertEqual(p['users']['9']['recovery_from_hour'],101)
         later=c.plan(p['users'],101,{9:0},[],{9:'luna'})

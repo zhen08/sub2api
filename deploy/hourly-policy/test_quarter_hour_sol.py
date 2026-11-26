@@ -36,7 +36,7 @@ class QuarterHourSolTests(unittest.TestCase):
             (5_000_000, 0, 0, 'original'),
             (5_000_001, 0, 0, 'sol'),
             (6_000_000, 10_000_001, 0, 'terra'),
-            (6_000_000, 10_000_001, 50_000_001, 'luna'),
+            (6_000_000, 10_000_001, 60_000_001, 'luna'),
         ):
             with self.subTest(expected=expected):
                 plan = c.plan({}, 100, {9: hourly_tokens}, [], {9: 'original'},

@@ -5,7 +5,7 @@ import controller as c
 class LunaSuspendTests(unittest.TestCase):
     def test_disabled_caps_even_huge_usage_at_terra(self):
         for tokens, expected in ((20_000_000, 'original'), (20_000_001, 'terra'),
-                                 (50_000_000, 'terra'), (50_000_001, 'terra'),
+                                 (60_000_000, 'terra'), (60_000_001, 'terra'),
                                  (10**18, 'terra')):
             with self.subTest(tokens=tokens):
                 self.assertEqual(c.decide({}, 100, tokens, luna_enabled=False)['level'], expected)
@@ -33,7 +33,7 @@ class LunaSuspendTests(unittest.TestCase):
         self.assertEqual(len(state['low_windows']), 8)
 
     def test_default_keeps_original_luna_behavior(self):
-        self.assertEqual(c.decide({}, 100, 50_000_001)['level'], 'luna')
+        self.assertEqual(c.decide({}, 100, 60_000_001)['level'], 'luna')
         self.assertEqual(c.decide({'level': 'luna'}, 100, 20_000_001)['level'], 'luna')
 
     def test_config_is_explicit_boolean_and_backwards_compatible(self):

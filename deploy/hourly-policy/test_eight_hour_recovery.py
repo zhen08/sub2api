@@ -20,12 +20,12 @@ import controller as c
 class EightHourRecoveryTests(unittest.TestCase):
     def test_positive_usage_resets_seven_hour_streak(self):
         for level in ('terra', 'luna'):
-            for tokens in (1, 9_999_999, 20_000_000, 20_000_001, 50_000_000, 50_000_001):
+            for tokens in (1, 9_999_999, 20_000_000, 20_000_001, 60_000_000, 60_000_001):
                 with self.subTest(level=level, tokens=tokens):
                     state = {'level': level, 'last': 106, 'low': 7,
                              'low_windows': windows(100, 106)}
                     reset = c.decide(state, 107, tokens)
-                    expected = 'luna' if level == 'luna' or tokens > 50_000_000 else 'terra'
+                    expected = 'luna' if level == 'luna' or tokens > 60_000_000 else 'terra'
                     self.assertEqual(reset['level'], expected)
                     self.assertEqual(reset['low'], 0)
                     self.assertEqual(reset['low_windows'], [])

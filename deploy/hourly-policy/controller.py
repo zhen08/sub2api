@@ -14,6 +14,9 @@ import urllib.request
 import urllib.parse
 
 
+LUNA_HOURLY_TOKEN_THRESHOLD = 60_000_000
+
+
 class PolicyError(Exception):
     pass
 
@@ -56,14 +59,14 @@ def decide(state, hour, tokens, luna_enabled=True, terra_enabled=True, luna_reco
     if not luna_enabled and state.get('level') == 'luna':
         state = dict(state, level='terra')
     if not terra_enabled and state.get('level') == 'terra' and hour >= state.get('last', -1):
-        level = 'luna' if luna_enabled and tokens > 50_000_000 else 'full'
+        level = 'luna' if luna_enabled and tokens > LUNA_HOURLY_TOKEN_THRESHOLD else 'full'
         state = dict(state, level=level, low=0, low_windows=[])
     if hour <= state.get('last', -1):
         return dict(state)
     level = state.get('level', 'original')
     low = 0
     windows = []
-    if luna_enabled and tokens > 50_000_000:
+    if luna_enabled and tokens > LUNA_HOURLY_TOKEN_THRESHOLD:
         level = 'luna'
     elif terra_enabled and not terra_half_hour and tokens > 20_000_000:
         level = 'luna' if level == 'luna' else 'terra'
@@ -145,7 +148,7 @@ def plan(users, hour, totals, keys, policies, luna_enabled=True, terra_enabled=T
                       'quarter_hour_tokens_gt_5000000' if quarter_limited else
                       'automatic_terra_suspended' if terra_relaxing else
                       'automatic_luna_suspended' if relaxing else
-                      'tokens_gt_50000000' if luna_enabled and tokens > 50_000_000 else
+                      f'tokens_gt_{LUNA_HOURLY_TOKEN_THRESHOLD}' if luna_enabled and tokens > LUNA_HOURLY_TOKEN_THRESHOLD else
                       'tokens_gt_20000000' if tokens > 20_000_000 else
                       ('twelve_consecutive_hours_eq_0' if old.get('level') == 'luna' and luna_recovery_hours == 12
                        else 'eight_consecutive_hours_eq_0') if level == 'full' else

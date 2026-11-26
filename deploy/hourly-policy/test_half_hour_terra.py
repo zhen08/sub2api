@@ -10,8 +10,10 @@ class HalfHourTests(unittest.TestCase):
             self.assertEqual(p['users']['9']['level'],want)
             again=c.plan(p['users'],100,{9:25_000_000},[],{9:want},terra_half_hour=True,half_slot=201,half_totals={9:n})
             self.assertEqual(again['ops'],[])
-        p=c.plan({},100,{9:50_000_001},[],{9:'original'},terra_half_hour=True,half_slot=201,half_totals={9:20_000_000})
-        self.assertEqual(p['users']['9']['level'],'luna')
+        for hourly_tokens, expected in ((50_000_001, 'terra'), (60_000_000, 'terra'), (60_000_001, 'luna')):
+            p = c.plan({}, 100, {9: hourly_tokens}, [], {9: 'original'},
+                       terra_half_hour=True, half_slot=201, half_totals={9: 20_000_000})
+            self.assertEqual(p['users']['9']['level'], expected)
 
     def test_half_tick_never_advances_recovery_twice_and_resets_terra(self):
         old={'9':{'level':'terra','last':99}}

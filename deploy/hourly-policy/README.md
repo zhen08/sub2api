@@ -14,7 +14,7 @@ An absent user aggregate is zero only after the complete usage snapshot passes
 validation.
 
 - More than 20,000,000 tokens: `terra` (an existing `luna` stays `luna`).
-- More than 50,000,000 tokens: `luna`.
+- More than 60,000,000 tokens: `luna`.
 - Recovery from `terra` or `luna`: **eight consecutive complete hourly windows,
   each with exactly zero OpenAI tokens**, then `full` (all models).
 - Any positive usage, even one token, clears the recovery streak.
@@ -28,7 +28,7 @@ Optional remote `<state-dir>/config.json` contains exactly
 `{"luna_enabled": false}` to suspend automatic Luna indefinitely, until an
 operator explicitly restores `true` (no expiry). Missing config preserves the
 original enabled behavior; invalid config fails closed. The >20M Terra cap stays
-in force even above 50M. Managed users whose live policy matches stored Luna are
+in force even above 60M. Managed users whose live policy matches stored Luna are
 relaxed to Terra, including a rerun of the already-processed hour; this preserves
 zero-window evidence and does not grant Full. Normal eight-zero-hour recovery is
 unchanged. Unmanaged/manual policy drift still aborts without writes. A pending
@@ -198,8 +198,8 @@ See [TESTING.md](TESTING.md) for the recorded RED/GREEN checks.
 
 The state-directory config also accepts `{"luna_enabled": true, "terra_enabled": false}`.
 Missing `terra_enabled` defaults to true. With this setting, >20M does not escalate;
->50M still escalates to Luna. Matching controller-managed Terra users relax to Full
-unless their latest complete hour exceeds 50M (then Luna), including same-hour reruns.
+>60M still escalates to Luna. Matching controller-managed Terra users relax to Full
+unless their latest complete hour exceeds 60M (then Luna), including same-hour reruns.
 Luna retains the eight-complete-zero-hour recovery rule. Manual policy drift and
 pending Terra escalations fail closed. Do not disable both flags together; that
 combination is not supported. Restore Terra only on explicit user instruction by
@@ -222,14 +222,14 @@ atomically set the remote state-directory config under the controller lock to
 This is an activation target, not a claim about live configuration. Do not enable
 it against the previous gateway, whose `terra` label still caps to Sol 6.1.
 The controller code and thresholds need no change: strictly >20M selects Terra,
-strictly >50M selects Luna, and all OpenAI keys/cache tokens are included.
+strictly >60M selects Luna, and all OpenAI keys/cache tokens are included.
 Terra retains eight zero-use hours; Luna retains twelve. Preserve state and
 pending journals; do not backfill processed hours or reset managed policies.
 Verify dry-run, apply, post-apply dry-run and scheduler state separately.
 
 ### Half-hour Terra rule
 
-`terra_half_hour: true` replaces the >20M hourly Terra trigger with strictly >10M in the preceding complete aligned 30-minute window. Cron runs at :05 and :35 to allow logging delay. Luna remains >50M per complete hour. Hourly recovery counters remain separate (Terra 8, Luna configured 12 hours); repeated half-hour ticks do not double-count zero-use hours. Half-slot journals and rollover guards reject stale partial runs.
+`terra_half_hour: true` replaces the >20M hourly Terra trigger with strictly >10M in the preceding complete aligned 30-minute window. Cron runs at :05 and :35 to allow logging delay. Luna remains >60M per complete hour. Hourly recovery counters remain separate (Terra 8, Luna configured 12 hours); repeated half-hour ticks do not double-count zero-use hours. Half-slot journals and rollover guards reject stale partial runs.
 
 ### Quarter-hour Sol rule
 
